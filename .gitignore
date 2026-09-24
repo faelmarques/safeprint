@@ -1,0 +1,22 @@
+# deps
+node_modules/
+web/node_modules/
+
+# next
+web/.next/
+web/out/
+
+# runtime data (pedidos, fotos base64, papel) — nunca commitar
+web/data/
+
+# segredos
+.env
+.env*.local
+web/.env
+web/.env*.local
+
+# misc
+.DS_Store
+*.pem
+*.log
+.vercel
