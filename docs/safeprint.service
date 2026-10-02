@@ -1,0 +1,15 @@
+[Unit]
+Description=SafePrint web + pi-agent
+After=network.target cups.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/safeprint/web
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/bin/bash -c 'cd /home/pi/safeprint/web && npm run start & PRINTER_SLUG=unifacef-bloco-a-x7k2 API_BASE=http://localhost:3000 CUPS_PRINTER=Brother python3 /home/pi/safeprint/pi-agent/agent.py'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -40,3 +40,14 @@ PRINTER_SLUG=unifacef-bloco-a-x7k2 API_BASE=https://seu-dominio CUPS_PRINTER=Bro
 - Uploads: S3/R2 privado com expiração 24h (LGPD)
 - Pagamento: webhook Mercado Pago → `PUT /api/jobs` vira automático
 - 1 impressora nova = 1 linha em Printer + QR impresso e colado na caixa
+
+## Deixando a máquina rodando 24h (notebook antigo / Pi / Linux)
+**Tampa fechada:** edite `/etc/systemd/logind.conf` com `HandleLidSwitch=ignore`, e reinicie com `sudo systemctl restart systemd-logind`.
+
+**Atualizações sem parar produção:** desative em `/etc/apt/apt.conf.d/20auto-upgrades` — rode update manual 1x por mês.
+
+**Voltar após queda de energia:** no BIOS (F2/F12/Del), habilite `Power on AC attach` → **Yes/Enabled** / `Restore on AC Power Loss` → **Power On**.
+
+**Subir site e agent automaticamente:** use serviços systemd com `Restart=always` (exemplo em `docs/safeprint.service`).
+
+**Nobreak recomendado** se a energia do local for instável.
