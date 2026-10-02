@@ -3,6 +3,13 @@ export interface PriceTier {
   pricePerSheetCents: number;
 }
 
+// Tabela padrão: até 5 fls R$1,50 • 6 a 10 fls R$1,35 • acima de 10 fls R$1,25
+export const DEFAULT_TIERS: PriceTier[] = [
+  { minSheets: 1, pricePerSheetCents: 150 },
+  { minSheets: 6, pricePerSheetCents: 135 },
+  { minSheets: 11, pricePerSheetCents: 125 },
+];
+
 export interface Printer {
   id: string;
   slug: string; // hash do QR code, ex: unifacef-bloco-a-x7k2
@@ -30,11 +37,7 @@ export const PRINTERS: Printer[] = [
     paperCurrent: 200,
     paperCapacity: 250,
     paperAlertAt: 50,
-    tiers: [
-      { minSheets: 10, pricePerSheetCents: 115 },
-      { minSheets: 5, pricePerSheetCents: 125 },
-      { minSheets: 1, pricePerSheetCents: 135 },
-    ],
+    tiers: DEFAULT_TIERS,
     colorAvailable: false,
   },
   {
@@ -47,11 +50,7 @@ export const PRINTERS: Printer[] = [
     paperCurrent: 180,
     paperCapacity: 250,
     paperAlertAt: 50,
-    tiers: [
-      { minSheets: 10, pricePerSheetCents: 115 },
-      { minSheets: 5, pricePerSheetCents: 125 },
-      { minSheets: 1, pricePerSheetCents: 135 },
-    ],
+    tiers: DEFAULT_TIERS,
     colorAvailable: false,
   },
 ];

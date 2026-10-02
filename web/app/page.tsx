@@ -11,7 +11,7 @@ const FAQS = [
   },
   {
     q: "Quanto custa?",
-    a: "R$ 1,35 por folha (1–4 fls), R$ 1,25 (5–9 fls) e R$ 1,15 (10+ fls). Papel A4, impressão P&B a laser, 1 página por folha.",
+    a: "R$ 1,50 por folha (até 5 fls), R$ 1,35 (6 a 10 fls) e R$ 1,25 (acima de 10 fls). Papel A4, impressão P&B a laser, 1 página por folha.",
   },
   {
     q: "Preciso instalar algo?",
@@ -29,9 +29,21 @@ const FAQS = [
 
 export default function Landing() {
   const [printers, setPrinters] = useState<Printer[]>([]);
+  const [promo, setPromo] = useState<{ enabled: boolean; title: string; description: string } | null>(null);
+  const [dark, setDark] = useState(false);
   useEffect(() => {
-    fetch("/api/printers").then((r) => r.json()).then((d) => setPrinters(d.printers ?? [])).catch(() => {});
+    const d = localStorage.getItem("sp-dark") === "1";
+    setDark(d);
+    document.documentElement.classList.toggle("dark", d);
+    fetch("/api/printers").then((r) => r.json()).then((d) => { setPrinters(d.printers ?? []); setPromo(d.promo ?? null); }).catch(() => {});
   }, []);
+
+  function toggleDark() {
+    const d = !dark;
+    setDark(d);
+    localStorage.setItem("sp-dark", d ? "1" : "0");
+    document.documentElement.classList.toggle("dark", d);
+  }
 
   return (
     <main className="min-h-screen font-sans text-ink-900 bg-white">
@@ -52,14 +64,25 @@ export default function Landing() {
             <a href="#duvidas" className="hover:text-ink-900">Dúvidas</a>
           </nav>
           <div className="flex items-center gap-2">
+            <button onClick={toggleDark} className="border border-ink-200 text-sm font-extrabold rounded-2xl px-3.5 py-2.5 bg-white" title="Modo escuro">{dark ? "☀️" : "🌙"}</button>
             <a href="/imprimir" className="bg-ink-900 hover:bg-ink-800 text-white text-sm font-extrabold rounded-2xl px-5 py-2.5 shadow-card">Imprimir agora</a>
           </div>
         </div>
       </header>
 
+      {/* PROMO BANNER */}
+      {promo?.enabled && promo?.title && (
+        <div className="bg-gradient-to-r from-amber-400 via-orange-400 to-amber-400 text-ink-900">
+          <p className="mx-auto max-w-5xl px-5 py-2.5 text-center text-sm font-extrabold">
+            🎉 {promo.title}{promo.description ? ` — ${promo.description}` : ""}
+          </p>
+        </div>
+      )}
+
       {/* HERO */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-ink-900 via-ink-900 to-brand-800" />
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(#fff 1px, transparent 1px)", backgroundSize: "22px 22px" }} />
         <div className="absolute -top-24 -right-24 size-96 rounded-full bg-brand-500/30 blur-3xl" />
         <div className="absolute -bottom-32 -left-24 size-96 rounded-full bg-emerald-400/20 blur-3xl" />
         <div className="relative mx-auto max-w-5xl px-5 py-14 md:py-20 grid md:grid-cols-2 gap-10 items-center text-white">
@@ -88,8 +111,8 @@ export default function Landing() {
               <p className="text-xs text-ink-400 font-medium">8 páginas • 1 cópia • frente</p>
               <div className="rounded-2xl bg-ink-50 border border-ink-100 p-3 mt-3 text-xs font-bold space-y-1">
                 <div className="flex justify-between"><span>Páginas 1–8</span><span>8 folhas</span></div>
-                <div className="flex justify-between text-ink-400"><span>Unitário</span><span>R$ 1,25</span></div>
-                <div className="flex justify-between text-base font-extrabold"><span>Total</span><span>R$ 10,00</span></div>
+                <div className="flex justify-between text-ink-400"><span>Unitário</span><span>R$ 1,35</span></div>
+                <div className="flex justify-between text-base font-extrabold"><span>Total</span><span>R$ 10,80</span></div>
               </div>
               <div className="mt-3 rounded-2xl bg-ink-900 text-white text-center font-extrabold text-sm py-3">Pagar com Pix</div>
               <p className="text-center text-[11px] text-ink-300 font-bold mt-2">✓ Na fila! Retire na máquina</p>
@@ -102,12 +125,28 @@ export default function Landing() {
       <section className="mx-auto max-w-5xl px-5 -mt-0 py-8 grid grid-cols-3 gap-3">
         {[
           ["< 1 min", "do QR ao papel"],
-          ["R$ 1,15", "a partir de 10 folhas"],
+          ["R$ 1,25", "a partir de 11 folhas"],
           ["24h*", "máquina no campus"],
         ].map(([v, l]) => (
           <div key={l} className="card p-4 text-center">
             <p className="font-display font-extrabold text-xl md:text-2xl tracking-tight">{v}</p>
             <p className="text-xs text-ink-400 font-medium">{l}</p>
+          </div>
+        ))}
+      </section>
+
+      {/* BENEFÍCIOS */}
+      <section className="mx-auto max-w-5xl px-5 pb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          ["📱", "Sem app", "Tudo no navegador do celular"],
+          ["💸", "Pix na hora", "Confirmação automática"],
+          ["🔒", "Privacidade LGPD", "Arquivo apagado em 24h"],
+          ["⚡", "~30 segundos", "Do QR ao papel na mão"],
+        ].map(([i, t, d]) => (
+          <div key={t} className="card p-4">
+            <p className="text-2xl">{i}</p>
+            <p className="font-extrabold text-sm mt-1.5">{t}</p>
+            <p className="text-xs text-ink-400 font-medium">{d}</p>
           </div>
         ))}
       </section>
@@ -140,9 +179,9 @@ export default function Landing() {
           <p className="text-sm text-ink-500 font-medium mt-2">Papel A4 • P&B a laser • 1 página por folha • pagamento via Pix</p>
           <div className="grid md:grid-cols-3 gap-4 mt-6">
             {[
-              ["Até 4 folhas", "R$ 1,35", "/folha", "Pra aquela impressão rápida antes da aula.", false],
-              ["5 a 9 folhas", "R$ 1,25", "/folha", "Trabalhos e listas maiores.", false],
-              ["10+ folhas", "R$ 1,15", "/folha", "TCC, apostilas e volumes. O melhor valor.", true],
+              ["Até 5 folhas", "R$ 1,50", "/folha", "Pra aquela impressão rápida antes da aula.", false],
+              ["6 a 10 folhas", "R$ 1,35", "/folha", "Trabalhos e listas maiores.", false],
+              ["Acima de 10", "R$ 1,25", "/folha", "TCC, apostilas e volumes. O melhor valor.", true],
             ].map(([t, v, u, d, hot]) => (
               <div key={t as string} className={`rounded-3xl p-6 border-2 ${hot ? "bg-ink-900 text-white border-ink-900 shadow-pop relative" : "card"}`}>
                 {hot && <span className="chip bg-emerald-400 text-ink-900 absolute -top-3 left-6">★ MAIS ESCOLHIDO</span>}
@@ -164,7 +203,7 @@ export default function Landing() {
         <h2 className="font-display font-extrabold tracking-tight text-2xl md:text-3xl mt-1">Máquinas perto de você.</h2>
         <div className="grid md:grid-cols-2 gap-4 mt-6">
           {printers.map((p) => (
-            <a key={p.id} href={`/imprimir?p=${p.slug}`} className="card p-5 hover:border-brand-300 hover:shadow-pop transition block">
+            <div key={p.id} className="card p-5 hover:border-brand-300 hover:shadow-pop transition block">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-extrabold">{p.name}</p>
@@ -174,14 +213,13 @@ export default function Landing() {
                   {p.status === "online" ? "● disponível" : "● offline"}
                 </span>
               </div>
-              <p className="text-sm font-extrabold text-brand-600 mt-3">Imprimir aqui →</p>
-            </a>
+              <div className="flex items-center gap-4 mt-3">
+                <a href={`/imprimir?p=${p.slug}`} className="text-sm font-extrabold text-brand-600">Imprimir aqui →</a>
+                {p.address && <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.address)}`} target="_blank" className="text-xs font-bold text-ink-400 underline">📍 Ver no mapa</a>}
+              </div>
+            </div>
           ))}
           {!printers.length && <p className="text-sm text-ink-400 font-medium">Carregando máquinas…</p>}
-        </div>
-        <div className="card p-5 mt-4 bg-gradient-to-r from-brand-50 to-emerald-50 border-brand-100">
-          <p className="font-extrabold text-sm">🏫 Quer uma SafePrint no seu campus, escritório ou comércio?</p>
-          <p className="text-sm text-ink-500 font-medium">A gente instala a máquina e cuida de tudo. Chama no contato da SafePrint.</p>
         </div>
       </section>
 
@@ -214,7 +252,7 @@ export default function Landing() {
       <footer className="border-t border-ink-100">
         <div className="mx-auto max-w-5xl px-5 py-8 flex flex-col md:flex-row gap-3 items-center justify-between text-xs text-ink-400 font-medium">
           <p><b className="text-ink-700">SafePrint</b> • Impressão autoatendimento • Franca/SP</p>
-          <p>*Horário conforme o local da máquina • Arquivos excluídos em 24h</p>
+          <p>*Horário conforme o local da máquina • Arquivos excluídos em 24h • <a href="/privacidade" className="underline">Privacidade</a></p>
         </div>
       </footer>
     </main>

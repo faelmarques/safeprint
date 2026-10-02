@@ -39,7 +39,13 @@ def print_file(job):
         path = f.name
     copies = job.get("copies", 1)
     # Somente frente: 1 página por folha (impressora sem duplex)
-    cmd = ["lp", "-d", CUPS_PRINTER, "-n", str(copies), "-o", "sides=one-sided", path]
+    opts = ["sides=one-sided"]
+    if job.get("landscape"):
+        opts.append("landscape")
+    pps = job.get("pagesPerSheet") or 1
+    if pps and int(pps) > 1:
+        opts.append(f"number-up-pages={int(pps)}")
+    cmd = ["lp", "-d", CUPS_PRINTER, "-n", str(copies), "-o", " ".join(opts), path]
     print("exec:", " ".join(cmd))
     try:
         subprocess.run(cmd, check=True, timeout=60)

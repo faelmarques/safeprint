@@ -32,6 +32,19 @@ export default function Admin() {
   const [fCap, setFCap] = useState("");
   const [fAlert, setFAlert] = useState("");
   const [fStatus, setFStatus] = useState("online");
+  const [fName, setFName] = useState("");
+  const [fLoc, setFLoc] = useState("");
+  const [fAddr, setFAddr] = useState("");
+
+  // preços e promoções
+  const [tiers, setTiers] = useState<{ minSheets: string; price: string }[]>([]);
+  const [promoOn, setPromoOn] = useState(false);
+  const [promoTitle, setPromoTitle] = useState("");
+  const [promoDesc, setPromoDesc] = useState("");
+  const [priceMsg, setPriceMsg] = useState("");
+  const [coupons, setCoupons] = useState<{ code: string; percentOff: string; active: boolean }[]>([]);
+  const [newCoupon, setNewCoupon] = useState("");
+  const [newCouponPct, setNewCouponPct] = useState("");
 
   useEffect(() => {
     const k = sessionStorage.getItem("sp-admin");
@@ -45,11 +58,19 @@ export default function Admin() {
       if (r.status === 401) { setAuthed(false); sessionStorage.removeItem("sp-admin"); return; }
       const d = await r.json();
       setData(d);
+      if (d.config) {
+        setTiers((d.config.tiers ?? []).map((t: any) => ({ minSheets: String(t.minSheets), price: (t.pricePerSheetCents / 100).toFixed(2).replace(".", ",") })));
+        setPromoOn(Boolean(d.config.promo?.enabled));
+        setPromoTitle(d.config.promo?.title ?? "");
+        setPromoDesc(d.config.promo?.description ?? "");
+        setCoupons((d.config.coupons ?? []).map((c: any) => ({ code: c.code, percentOff: String(c.percentOff), active: c.active !== false })));
+      }
       if (!selectedId && d.printers?.length) {
         const p = d.printers[0];
         setSelectedId(p.id);
         setFQty(String(p.paperCurrent)); setFCap(String(p.paperCapacity));
         setFAlert(String(p.paperAlertAt)); setFStatus(p.status);
+        setFName(p.name ?? ""); setFLoc(p.location ?? ""); setFAddr(p.address ?? "");
       }
     } finally { setLoading(false); }
   }, [selectedId]);
@@ -68,6 +89,7 @@ export default function Admin() {
     setSelectedId(p.id);
     setFQty(String(p.paperCurrent)); setFCap(String(p.paperCapacity));
     setFAlert(String(p.paperAlertAt)); setFStatus(p.status);
+    setFName(p.name ?? ""); setFLoc(p.location ?? ""); setFAddr(p.address ?? "");
     setMsg("");
   }
 
@@ -76,11 +98,28 @@ export default function Admin() {
     const r = await fetch("/api/admin/paper", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-admin-key": key },
-      body: JSON.stringify({ printerId: selectedId, qty: fQty, capacity: fCap, alertAt: fAlert, status: fStatus }),
+      body: JSON.stringify({ printerId: selectedId, qty: fQty, capacity: fCap, alertAt: fAlert, status: fStatus, name: fName, location: fLoc, address: fAddr }),
     });
     const d = await r.json();
     if (!r.ok) { setMsg("⚠️ " + (d.error ?? "Erro ao salvar")); return; }
     setMsg("✅ Impressora atualizada!");
+    load(key);
+  }
+
+  async function savePricing() {
+    setPriceMsg("");
+    const parsed = tiers.map((t) => ({
+      minSheets: Number(t.minSheets),
+      pricePerSheetCents: Math.round(Number(t.price.replace(",", ".")) * 100),
+    }));
+    const r = await fetch("/api/admin/pricing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-key": key },
+      body: JSON.stringify({ tiers: parsed, promo: { enabled: promoOn, title: promoTitle, description: promoDesc }, coupons: coupons.map((c) => ({ code: c.code, percentOff: Number(c.percentOff), active: c.active })) }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setPriceMsg("⚠️ " + (d.error ?? "Erro ao salvar")); return; }
+    setPriceMsg("✅ Preços e promoção atualizados! Já estão valendo no site.");
     load(key);
   }
 
@@ -224,6 +263,26 @@ export default function Admin() {
               ))}
             </div>
 
+            {/* saúde da máquina */}
+            {(() => {
+              const life = Number(sel.lifetimeSheets ?? 0);
+              const DRUM = 30000;
+              const drumPct = Math.max(0, Math.min(100, 100 - (life / DRUM) * 100));
+              return (
+                <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4">
+                  <p className="font-extrabold text-sm mb-3">🩺 Saúde do consumível</p>
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className={drumPct < 20 ? "text-red-500" : "text-ink-600"}>Unidade de cilindro estimada {drumPct.toFixed(0)}%</span>
+                    <span className="text-ink-400">{life.toLocaleString("pt-BR")} / {DRUM.toLocaleString("pt-BR")} folhas</span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-ink-100 mt-1.5 overflow-hidden">
+                    <div className={`h-full rounded-full ${drumPct < 20 ? "bg-red-500" : drumPct < 50 ? "bg-amber-400" : "bg-emerald-500"}`} style={{ width: `${drumPct}%` }} />
+                  </div>
+                  <p className="hint mt-2">Estimativa por folhas impressas no ciclo. Zere recarregando o contador no papel da máquina... e anote a troca real do consumível.</p>
+                </div>
+              );
+            })()}
+
             <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4">
               <p className="font-extrabold text-sm mb-3">⚙️ Gerenciar máquina</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -243,6 +302,19 @@ export default function Admin() {
               <button onClick={savePrinter} className="mt-3 bg-ink-900 text-white text-sm font-bold px-5 py-2.5 rounded-2xl hover:bg-ink-800">Salvar alterações</button>
               {msg && <p className="text-sm font-bold mt-2">{msg}</p>}
               <p className="hint mt-2">Recarregou papel? Digite a quantidade colocada e salve. Offline/manutenção pausa as vendas na hora.</p>
+            </div>
+
+            <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4">
+              <p className="font-extrabold text-sm mb-3">📍 Unidade / local da máquina</p>
+              <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <label className="text-xs font-bold text-ink-500">Nome da unidade
+                  <input value={fName} onChange={(e) => setFName(e.target.value)} className="input mt-1" placeholder="UniFACEF — Bloco A" /></label>
+                <label className="text-xs font-bold text-ink-500">Local / sala
+                  <input value={fLoc} onChange={(e) => setFLoc(e.target.value)} className="input mt-1" placeholder="Bloco A, térreo, cantina" /></label>
+                <label className="text-xs font-bold text-ink-500">Endereço
+                  <input value={fAddr} onChange={(e) => setFAddr(e.target.value)} className="input mt-1" placeholder="Av. ..., 2400 - Franca/SP" /></label>
+              </div>
+              <p className="hint mt-2">As mudanças refletem no site para os estudantes na hora (use &quot;Salvar alterações&quot; acima também).</p>
             </div>
 
             <div>
@@ -274,6 +346,70 @@ export default function Admin() {
             </div>
           </div>
         )}
+
+        {/* preços & promoções */}
+        <div className="card p-5 md:p-6 space-y-5">
+          <div>
+            <p className="font-extrabold text-lg tracking-tight">🏷️ Preços & promoções</p>
+            <p className="text-xs text-ink-400 font-medium mt-0.5">Vale para todas as máquinas. A faixa de menor &quot;a partir de&quot; define o preço base.</p>
+          </div>
+
+          <div className="space-y-2.5">
+            <p className="label">Faixas de preço (por folha)</p>
+            {tiers.map((t, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-xs font-bold text-ink-400 w-24 shrink-0">{i === 0 ? "a partir de" : "de"}</span>
+                <input type="number" min={1} disabled={i === 0} value={t.minSheets}
+                  onChange={(e) => setTiers(tiers.map((x, j) => j === i ? { ...x, minSheets: e.target.value } : x))}
+                  className="input !py-2.5 w-24 disabled:bg-ink-50 disabled:text-ink-300" placeholder="mín. folhas" />
+                <span className="text-xs font-bold text-ink-400">folhas →</span>
+                <div className="flex items-center gap-1 flex-1">
+                  <span className="text-sm font-bold text-ink-500">R$</span>
+                  <input value={t.price} inputMode="decimal"
+                    onChange={(e) => setTiers(tiers.map((x, j) => j === i ? { ...x, price: e.target.value } : x))}
+                    className="input !py-2.5" placeholder="1,50" />
+                </div>
+                {tiers.length > 1 && i > 0 && (
+                  <button onClick={() => setTiers(tiers.filter((_, j) => j !== i))} className="text-xs font-bold text-red-400 px-2">✕</button>
+                )}
+              </div>
+            ))}
+            <button onClick={() => setTiers([...tiers, { minSheets: "", price: "" }])} className="text-xs font-extrabold text-brand-600">+ adicionar faixa</button>
+          </div>
+
+          <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4 space-y-3">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" checked={promoOn} onChange={(e) => setPromoOn(e.target.checked)} className="size-4 accent-ink-900" />
+              <span className="text-sm font-extrabold">Ativar banner de promoção no site</span>
+            </label>
+            <input value={promoTitle} onChange={(e) => setPromoTitle(e.target.value)} className="input" placeholder="Título da promoção (ex: Semana do TCC)" disabled={!promoOn} />
+            <input value={promoDesc} onChange={(e) => setPromoDesc(e.target.value)} className="input" placeholder="Descrição (ex: De 6 a 10 folhas por R$ 1,25 até sexta)" disabled={!promoOn} />
+          </div>
+
+          <div className="space-y-2.5">
+            <p className="label">🎟️ Cupons de desconto</p>
+            {coupons.map((c, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input value={c.code} onChange={(e) => setCoupons(coupons.map((x, j) => j === i ? { ...x, code: e.target.value } : x))} className="input !py-2.5 flex-1 uppercase font-mono" placeholder="ALUNO10" />
+                <input value={c.percentOff} inputMode="numeric" onChange={(e) => setCoupons(coupons.map((x, j) => j === i ? { ...x, percentOff: e.target.value } : x))} className="input !py-2.5 w-24" placeholder="10" />
+                <span className="text-xs font-bold text-ink-400">% off</span>
+                <label className="flex items-center gap-1 text-xs font-bold text-ink-500">
+                  <input type="checkbox" checked={c.active} onChange={(e) => setCoupons(coupons.map((x, j) => j === i ? { ...x, active: e.target.checked } : x))} className="size-4 accent-ink-900" /> ativo
+                </label>
+                <button onClick={() => setCoupons(coupons.filter((_, j) => j !== i))} className="text-xs font-bold text-red-400 px-2">✕</button>
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <input value={newCoupon} onChange={(e) => setNewCoupon(e.target.value)} className="input !py-2.5 flex-1 uppercase font-mono" placeholder="NOVO CUPOM" />
+              <input value={newCouponPct} inputMode="numeric" onChange={(e) => setNewCouponPct(e.target.value)} className="input !py-2.5 w-24" placeholder="%" />
+              <button onClick={() => { if (newCoupon.trim() && newCouponPct) { setCoupons([...coupons, { code: newCoupon, percentOff: newCouponPct, active: true }]); setNewCoupon(""); setNewCouponPct(""); } }} className="text-xs font-extrabold text-brand-600">+ adicionar</button>
+            </div>
+            <p className="hint">O estudante digita o código na etapa de ajustes e o desconto entra no total.</p>
+          </div>
+
+          <button onClick={savePricing} className="bg-ink-900 text-white text-sm font-bold px-5 py-2.5 rounded-2xl hover:bg-ink-800">Salvar preços e promoção</button>
+          {priceMsg && <p className="text-sm font-bold">{priceMsg}</p>}
+        </div>
 
         {/* reembolsos */}
         <div className="card p-5">

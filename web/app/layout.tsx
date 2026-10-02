@@ -5,8 +5,8 @@ import "./globals.css";
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] });
 
 export const metadata: Metadata = {
-  title: "SafePrint — Impressão autoatendimento",
-  description: "Escaneie, envie, pague e retire. Impressão autoatendimento no Unifacef e em toda Franca.",
+  title: "SafePrint — Imprima sem fila pelo celular",
+  description: "Escaneie o QR, envie o PDF, pague no Pix e retire na máquina. Impressão P&B a laser no campus, a partir de R$ 1,25/folha.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

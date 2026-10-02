@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { store, isAdmin, REFUND_MOTIVES, type RefundMotive, type RefundRequest } from "@/lib/store";
+import { rateLimit } from "@/lib/ratelimit";
+import { checkDataUrl } from "@/lib/filefilter";
 
 export async function POST(req: Request) {
+  const rl = rateLimit(req, "refunds-post", 10, 60 * 60 * 1000);
+  if (!rl.ok) return NextResponse.json({ error: `Muitas solicitações. Tente em ${rl.retryAfter}s.` }, { status: 429 });
   const { jobId, motive, description, name, whatsapp, photoDataUrl } = await req.json();
   const job = store.jobs.get(jobId);
   if (!job) return NextResponse.json({ error: "Pedido de impressão não encontrado" }, { status: 404 });
@@ -14,6 +18,8 @@ export async function POST(req: Request) {
   const phone = String(whatsapp ?? "").replace(/\D/g, "");
   if (phone.length < 10) return NextResponse.json({ error: "Informe um WhatsApp válido com DDD" }, { status: 400 });
   if (!photoDataUrl) return NextResponse.json({ error: "Envie a foto da impressão com defeito" }, { status: 400 });
+  const photoErr = checkDataUrl(String(photoDataUrl), "image");
+  if (photoErr) return NextResponse.json({ error: photoErr }, { status: 400 });
 
   const r: RefundRequest = {
     id: uuid(),

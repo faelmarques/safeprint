@@ -8,9 +8,10 @@ export function pricePerSheet(sheets: number, tiers: PriceTier[]): number {
   return sorted[sorted.length - 1].pricePerSheetCents;
 }
 
-export function calcSheets(pagesCount: number, copies: number, duplex: boolean): number {
+export function calcSheets(pagesCount: number, copies: number, duplex: boolean, perSheet = 1): number {
   const total = pagesCount * copies;
-  return duplex ? Math.ceil(total / 2) : total;
+  const def = perSheet > 1 ? Math.ceil(total / perSheet) : total;
+  return duplex ? Math.ceil(def / 2) : def;
 }
 
 export function calcTotal(sheets: number, tiers: PriceTier[]) {

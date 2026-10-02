@@ -3,18 +3,32 @@
 @tailwind utilities;
 
 body {
-  background: #f6f7f9;
+  background: #f8f9fb;
   color: #23262f;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease;
 }
 
+/* Dark mode simples — inverte a paleta preservando fotos */
+html.dark body { filter: invert(0.93) hue-rotate(180deg); }
+html.dark img, html.dark video, html.dark iframe { filter: invert(1) hue-rotate(180deg); }
+
 @layer components {
-  .card { @apply bg-white border border-ink-100 rounded-3xl shadow-card; }
-  .input { @apply w-full bg-white border border-ink-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 transition placeholder:text-ink-300; }
+  .card { @apply bg-white border border-ink-100/80 rounded-[1.75rem] shadow-card transition-all duration-300 ease-out; }
+  .input { @apply w-full bg-white border border-ink-200/80 rounded-[1.25rem] px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 transition-all duration-300 placeholder:text-ink-300; }
   .label { @apply text-[13px] font-semibold text-ink-700; }
   .hint { @apply text-xs text-ink-400; }
-  .btn-primary { @apply w-full bg-ink-900 hover:bg-ink-800 text-white font-bold rounded-2xl py-3.5 text-[15px] transition active:scale-[.99] disabled:opacity-50 shadow-card; }
-  .btn-brand { @apply w-full bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-2xl py-3.5 text-[15px] transition active:scale-[.99] disabled:opacity-50 shadow-pop; }
-  .chip { @apply inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full; }
-  .stepdot { @apply size-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0; }
+  .btn-primary { @apply w-full bg-ink-900 hover:bg-ink-800 text-white font-bold rounded-[1.25rem] py-3.5 text-[15px] transition-all duration-300 active:scale-[.99] disabled:opacity-50 shadow-card; }
+  .btn-brand { @apply w-full bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-[1.25rem] py-3.5 text-[15px] transition-all duration-300 active:scale-[.99] disabled:opacity-50 shadow-pop; }
+  .chip { @apply inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full transition-all duration-200; }
+  .stepdot { @apply size-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-300; }
 }
+
+/* suaviza inputs, botões e cards em toda a plataforma */
+input, select, textarea { @apply transition-all duration-300; }
+button { @apply transition-all duration-200; }
+button:active { transform: scale(0.97); }
+.card:hover { box-shadow: 0 12px 40px -12px rgba(29, 99, 235, .18); }
+
+/* scroll suave */
+html { scroll-behavior: smooth; }

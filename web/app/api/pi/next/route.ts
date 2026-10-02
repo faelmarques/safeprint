@@ -11,6 +11,9 @@ function merged(printerId: string) {
     status: o.status ?? base.status,
     paperCapacity: o.paperCapacity ?? base.paperCapacity,
     paperAlertAt: o.paperAlertAt ?? base.paperAlertAt,
+    name: o.name ?? base.name,
+    location: o.location ?? base.location,
+    address: o.address ?? base.address,
     paperCurrent: store.paper.get(base.id, base.paperCurrent),
   };
 }
@@ -45,6 +48,8 @@ export async function POST(req: Request) {
   store.jobs.save(job);
 
   if (printer) {
+    const prevLife = store.meta.get(printer.id).lifetimeSheets ?? 0;
+    store.meta.set(printer.id, { lifetimeSheets: prevLife + job.sheets });
     const remaining = store.paper.consume(printer.id, job.sheets, printer.paperCapacity);
     let notified = null;
     if (remaining <= printer.paperAlertAt) {

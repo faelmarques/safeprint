@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { PRINTERS } from "@/lib/printers";
-import { store, isAdmin } from "@/lib/store";
+import { store, isAdmin, effectiveTiers } from "@/lib/store";
 
 const PAID = ["queued", "printing", "done"];
 
@@ -39,7 +39,12 @@ export async function GET(req: Request) {
       status: meta[p.id]?.status ?? p.status,
       paperCapacity: meta[p.id]?.paperCapacity ?? p.paperCapacity,
       paperAlertAt: meta[p.id]?.paperAlertAt ?? p.paperAlertAt,
+      name: meta[p.id]?.name ?? p.name,
+      location: meta[p.id]?.location ?? p.location,
+      address: meta[p.id]?.address ?? p.address,
       paperCurrent: store.paper.get(p.id, p.paperCurrent),
+      lifetimeSheets: meta[p.id]?.lifetimeSheets ?? 0,
+      tiers: effectiveTiers(p.id, p.tiers),
       revenue: pj.reduce((s, j) => s + j.totalCents, 0),
       sheets: pj.reduce((s, j) => s + j.sheets, 0),
       pagesPrinted: pj.reduce((s, j) => s + j.pages.length * j.copies, 0),
@@ -70,5 +75,6 @@ export async function GET(req: Request) {
     days,
     printers,
     refunds: refundsWithPrinter,
+    config: store.config.get(),
   });
 }

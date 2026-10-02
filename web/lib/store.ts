@@ -13,8 +13,12 @@ export interface PrintJob {
   pages: number[];
   copies: number;
   duplex: boolean;
+  pagesPerSheet?: number;
+  landscape?: boolean;
   sheets: number;
   totalCents: number;
+  discountCents?: number;
+  couponCode?: string;
   status: JobStatus;
   createdAt: string;
   fileDataUrl?: string; // MVP: base64 pequeno. Produção: URL S3 privada com expiração.
@@ -50,6 +54,23 @@ export interface PrinterOverride {
   status?: "online" | "offline" | "maintenance";
   paperCapacity?: number;
   paperAlertAt?: number;
+  tiers?: import("./printers").PriceTier[];
+  name?: string;
+  location?: string;
+  address?: string;
+  lifetimeSheets?: number;
+}
+
+export interface Coupon {
+  code: string;
+  percentOff: number; // 0-100
+  active: boolean;
+}
+
+export interface PricingConfig {
+  tiers: import("./printers").PriceTier[];
+  promo: { enabled: boolean; title: string; description: string };
+  coupons: Coupon[];
 }
 
 export function isAdmin(req: Request): boolean {
@@ -62,6 +83,7 @@ const JOBS_FILE = path.join(DATA_DIR, "jobs.json");
 const REFUNDS_FILE = path.join(DATA_DIR, "refunds.json");
 const PAPER_FILE = path.join(DATA_DIR, "paper.json");
 const META_FILE = path.join(DATA_DIR, "printers-meta.json");
+const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 
 function ensure() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -69,6 +91,15 @@ function ensure() {
   if (!fs.existsSync(REFUNDS_FILE)) fs.writeFileSync(REFUNDS_FILE, "[]");
   if (!fs.existsSync(PAPER_FILE)) fs.writeFileSync(PAPER_FILE, JSON.stringify({ "printer-unifacef-01": 200, "printer-demo-centro": 180 }));
   if (!fs.existsSync(META_FILE)) fs.writeFileSync(META_FILE, "{}");
+  if (!fs.existsSync(CONFIG_FILE)) fs.writeFileSync(CONFIG_FILE, JSON.stringify({
+    tiers: [
+      { minSheets: 1, pricePerSheetCents: 150 },
+      { minSheets: 6, pricePerSheetCents: 135 },
+      { minSheets: 11, pricePerSheetCents: 125 },
+    ],
+    promo: { enabled: false, title: "", description: "" },
+    coupons: [],
+  }, null, 2));
 }
 
 function read<T>(f: string, fallback: T): T {
@@ -126,6 +157,20 @@ export const store = {
       return m[printerId];
     },
   },
+  config: {
+    get(): PricingConfig {
+      try {
+        const c = read<PricingConfig>(CONFIG_FILE, null as any);
+        if (c && Array.isArray(c.tiers) && c.tiers.length) return c;
+      } catch {}
+      return { tiers: [
+        { minSheets: 1, pricePerSheetCents: 150 },
+        { minSheets: 6, pricePerSheetCents: 135 },
+        { minSheets: 11, pricePerSheetCents: 125 },
+      ], promo: { enabled: false, title: "", description: "" }, coupons: [] };
+    },
+    set(c: PricingConfig) { write(CONFIG_FILE, c); return c; },
+  },
   paper: {
     get(printerId: string, fallback = 200): number {
       const m = read<PaperState>(PAPER_FILE, {});
@@ -144,6 +189,13 @@ export const store = {
     },
   },
 };
+
+export function effectiveTiers(printerId: string, fallback: import("./printers").PriceTier[]): import("./printers").PriceTier[] {
+  const metaTiers = store.meta.get(printerId).tiers;
+  if (Array.isArray(metaTiers) && metaTiers.length) return metaTiers;
+  const cfgTiers = store.config.get().tiers;
+  return Array.isArray(cfgTiers) && cfgTiers.length ? cfgTiers : fallback;
+}
 
 export async function notifyLowPaper(printerName: string, remaining: number) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
