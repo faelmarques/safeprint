@@ -12,7 +12,8 @@ export const DEFAULT_TIERS: PriceTier[] = [
 
 export interface Printer {
   id: string;
-  slug: string; // hash do QR code, ex: unifacef-bloco-a-x7k2
+  slug: string; // hash do QR code, ex: unifacef-bloco-a-3241... (48 hex)
+  code: string; // código curto de 6 dígitos colado na caixa, ex: 012345
   name: string;
   location: string;
   address: string;
@@ -30,6 +31,7 @@ export const PRINTERS: Printer[] = [
   {
     id: "printer-unifacef-01",
     slug: "unifacef-bloco-a-324149f6f74c4dc95861fe9be88a90aee327feabca140112",
+    code: "012345",
     name: "UniFACEF — Bloco A",
     location: "Bloco A, térreo, ao lado da cantina",
     address: "Av. Dr. Ismael Alonso y Alonso, 2400 - Franca/SP",
@@ -43,6 +45,7 @@ export const PRINTERS: Printer[] = [
   {
     id: "printer-demo-centro",
     slug: "franca-centro-381319d5dd979b38e301aacad3a526166581302f3c9162fe",
+    code: "739201",
     name: "Franca Centro — Demo",
     location: "Papelaria parceira (demonstração)",
     address: "Rua do Comércio, 100 - Centro, Franca/SP",

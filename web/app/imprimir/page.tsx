@@ -31,6 +31,8 @@ export default function Home() {
   const [dark, setDark] = useState(false);
   const [slug, setSlug] = useState("");
   const [step, setStep] = useState<Step>(1);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeErr, setCodeErr] = useState("");
 
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [active, setActive] = useState(0);
@@ -404,12 +406,21 @@ export default function Home() {
             <div className="mx-auto size-14 rounded-2xl bg-ink-900 text-white flex items-center justify-center text-2xl shadow-card">📷</div>
             <div>
               <h2 className="font-extrabold text-lg tracking-tight">Escaneie o QR Code da impressora</h2>
-              <p className="hint">Aponte a câmera do celular para o QR colado na caixa. O pedido só abre com o código da máquina — sem QR, sem impressão.</p>
+              <p className="hint">Aponte a câmera do celular para o QR colado na caixa. No notebook, digite o código de 6 dígitos colado nela.</p>
+            </div>
+            <div className="rounded-3xl bg-ink-50 border border-ink-100 p-4 space-y-2.5 text-left">
+              <p className="label">Insira o código da impressora</p>
+              <div className="flex gap-2">
+                <input value={codeInput} onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="012345" className="input font-mono text-center tracking-[0.3em]" />
+                <button onClick={() => {
+                  const found = printers.find((p) => p.code === codeInput.trim());
+                  if (found) { setCodeErr(""); setSlug(found.slug); setStep(2); }
+                  else setCodeErr("Código inválido. Confira os 6 dígitos colados na máquina.");
+                }} className="bg-ink-900 text-white text-sm font-bold px-5 rounded-2xl whitespace-nowrap">Usar código</button>
+              </div>
+              {codeErr && <p className="text-sm font-bold text-red-500">{codeErr}</p>}
             </div>
             {!printers.length && <p className="hint">Carregando…</p>}
-            {printers.length > 0 && !printer && (
-              <p className="rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-bold p-3">⚠️ Código da máquina não identificado. Escaneie o QR colado nela para continuar.</p>
-            )}
           </section>
         )}
 
