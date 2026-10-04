@@ -41,7 +41,21 @@ export async function POST(req: Request) {
   if (ok === false) {
     job.status = "failed";
     store.jobs.save(job);
-    return NextResponse.json({ job });
+    // Estorno automático: recebeu Pix mas não imprimiu -> devolve sem abrir o MP
+    try {
+      if (job.mpPaymentId && job.mpStatus === "approved" && !job.mpRefunded) {
+        const { refundMpPayment, mpEnabled } = await import("@/lib/mercadopago");
+        if (mpEnabled()) {
+          await refundMpPayment(job.mpPaymentId);
+          job.mpRefunded = true;
+          store.jobs.save(job);
+          return NextResponse.json({ job, refunded: true });
+        }
+      }
+    } catch (e) {
+      console.error("auto-refund falhou:", e);
+    }
+    return NextResponse.json({ job, refunded: false });
   }
 
   job.status = "done";

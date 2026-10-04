@@ -22,6 +22,11 @@ export interface PrintJob {
   status: JobStatus;
   createdAt: string;
   fileDataUrl?: string; // MVP: base64 pequeno. Produção: URL S3 privada com expiração.
+  mpPaymentId?: number;
+  mpStatus?: string;
+  mpQrBase64?: string;
+  mpCopyPaste?: string;
+  mpRefunded?: boolean;
 }
 
 export type RefundMotive = "quantidade_incorreta" | "nao_saiu" | "saiu_falhada" | "outro";

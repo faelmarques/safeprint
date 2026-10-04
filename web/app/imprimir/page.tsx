@@ -59,6 +59,10 @@ export default function Home() {
   const [refundOk, setRefundOk] = useState("");
   const [confirmedOk, setConfirmedOk] = useState(false);
   const [lgpdOk, setLgpdOk] = useState(false);
+  const [pixQr, setPixQr] = useState("");
+  const [pixCopy, setPixCopy] = useState("");
+  const [pixId, setPixId] = useState("");
+  const [payerEmail, setPayerEmail] = useState("");
 
   const previewRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -281,12 +285,14 @@ export default function Home() {
       }
       setJobIds(ids);
       setCancelled(false);
+      setPixQr(""); setPixCopy(""); setPixId("");
       setStep(4);
     } catch (e: any) { setErr(e.message); }
     finally { setLoading(false); }
   }
 
   async function mockPay() {
+    // Sem token MP (dev): mantém simulação antiga
     setLoading(true); setErr("");
     try {
       for (const id of jobIds) {
@@ -294,13 +300,45 @@ export default function Home() {
         const d = await r.json();
         if (!r.ok) throw new Error(d.error ?? "Erro no pagamento");
       }
-      const n = Number(localStorage.getItem("sp-loyalty") ?? "0") + 1;
-      localStorage.setItem("sp-loyalty", String(n));
-      setLoyalty(n);
-      setStep(5);
+      finishPaid();
     } catch (e: any) { setErr(e.message); }
     finally { setLoading(false); }
   }
+
+  function finishPaid() {
+    const n = Number(localStorage.getItem("sp-loyalty") ?? "0") + 1;
+    localStorage.setItem("sp-loyalty", String(n));
+    setLoyalty(n);
+    setStep(5);
+  }
+
+  async function startPix() {
+    setLoading(true); setErr(""); setPixQr(""); setPixCopy(""); setPixId("");
+    try {
+      const r = await fetch("/api/payments/pix", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobIds, payerEmail: payerEmail || undefined }),
+      });
+      const d = await r.json();
+      if (r.status === 503) { await mockPay(); return; } // dev sem token
+      if (!r.ok) throw new Error(d.error ?? "Erro ao gerar Pix");
+      setPixQr(d.qrBase64 ?? ""); setPixCopy(d.copyPaste ?? ""); setPixId(String(d.paymentId));
+    } catch (e: any) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => {
+    if (!pixId || step !== 4) return;
+    let stop = false;
+    const t = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/payments/pix?paymentId=${pixId}`);
+        const d = await r.json();
+        if (d.status === "approved" && !stop) { clearInterval(t); finishPaid(); }
+      } catch {}
+    }, 4000);
+    return () => { stop = true; clearInterval(t); };
+  }, [pixId, step]);
 
   async function sendRefund() {
     setLoading(true); setRefundOk(""); setErr("");
@@ -649,13 +687,24 @@ export default function Home() {
             <h2 className="font-extrabold text-lg tracking-tight">Pagamento via Pix</h2>
             <p className="font-display font-extrabold text-3xl">{brl(price.totalCents)}</p>
             <p className="hint">{totalSheets} folha(s) × {brl(price.unitCents)} • {printer?.name} • {jobIds.length} pedido(s)</p>
-            <div className="mx-auto size-48 rounded-3xl bg-ink-900 text-white flex flex-col items-center justify-center gap-1 shadow-card">
-              <span className="text-3xl">◇</span>
-              <span className="text-xs font-bold">QR PIX aqui</span>
-              <span className="text-[10px] text-white/60 px-4">Mercado Pago no deploy — confirma automático</span>
-            </div>
-            <button disabled={loading} onClick={mockPay} className="btn-primary">{loading ? "Confirmando…" : "Já paguei — liberar impressão"}</button>
-            <p className="hint">MVP: botão simula a confirmação do banco.</p>
+            {!pixQr ? (
+              <>
+                <input value={payerEmail} onChange={(e) => setPayerEmail(e.target.value)} inputMode="email" placeholder="Seu e-mail (pro comprovante Pix)" className="input text-center" />
+                <button disabled={loading} onClick={startPix} className="btn-primary">{loading ? "Gerando Pix…" : "Gerar Pix →"}</button>
+                <p className="hint">Pix via Mercado Pago • confirma sozinho em segundos</p>
+              </>
+            ) : (
+              <>
+                {pixQr ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`data:image/png;base64,${pixQr}`} alt="QR Pix" className="mx-auto size-48 rounded-3xl border border-ink-100 shadow-card" />
+                ) : null}
+                {pixCopy && (
+                  <button onClick={() => navigator.clipboard?.writeText(pixCopy)} className="chip border-2 border-ink-200 bg-white px-4 py-2 font-mono text-[11px] break-all max-w-full">📋 Copiar código Pix</button>
+                )}
+                <p className="hint">Pagou? Aguarde, liberamos sozinho… (ou <button onClick={mockPay} className="underline font-bold">simular em dev</button>)</p>
+              </>
+            )}
           </section>
         )}
 
@@ -772,7 +821,7 @@ export default function Home() {
                 )}
               </>
             )}
-            <button onClick={() => { setStep(1); setFiles([]); setJobIds([]); setRange("todas"); setCopies(1); setCouponApplied(null); setCouponInput(""); setRefundPhoto(""); setRefundOk(""); setRefundMotive(""); setRefundDesc(""); setRefundName(""); setRefundZap(""); setShowRefund(false); setConfirmedOk(false); setCancelled(false); }} className="text-xs font-bold text-ink-300 underline">Nova impressão</button>
+            <button onClick={() => { setStep(1); setFiles([]); setJobIds([]); setPixQr(""); setPixCopy(""); setPixId(""); setPayerEmail(""); setRange("todas"); setCopies(1); setCouponApplied(null); setCouponInput(""); setRefundPhoto(""); setRefundOk(""); setRefundMotive(""); setRefundDesc(""); setRefundName(""); setRefundZap(""); setShowRefund(false); setConfirmedOk(false); setCancelled(false); }} className="text-xs font-bold text-ink-300 underline">Nova impressão</button>
           </section>
         )}
 

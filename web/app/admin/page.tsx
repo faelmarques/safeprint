@@ -46,6 +46,8 @@ export default function Admin() {
   const [coupons, setCoupons] = useState<{ code: string; percentOff: string; active: boolean }[]>([]);
   const [newCoupon, setNewCoupon] = useState("");
   const [newCouponPct, setNewCouponPct] = useState("");
+  const [fin, setFin] = useState<any>(null);
+  const [finMsg, setFinMsg] = useState("");
 
   useEffect(() => {
     const k = sessionStorage.getItem("sp-admin");
@@ -131,6 +133,28 @@ export default function Admin() {
       body: JSON.stringify({ id, status }),
     });
     load(key);
+  }
+
+  async function loadFin() {
+    setFinMsg("");
+    const r = await fetch("/api/admin/finance", { headers: { "x-admin-key": key } });
+    const d = await r.json();
+    if (!r.ok) { setFinMsg("⚠️ " + (d.error ?? "Erro")); return; }
+    setFin(d);
+  }
+
+  async function refundJob(jobId: string) {
+    if (!confirm("Estornar o Pix deste pedido no Mercado Pago?")) return;
+    setFinMsg("");
+    const r = await fetch("/api/admin/finance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-key": key },
+      body: JSON.stringify({ jobId }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setFinMsg("⚠️ " + (d.error ?? "Erro no estorno")); return; }
+    setFinMsg("✅ Estornado no Mercado Pago.");
+    loadFin();
   }
 
   if (!authed) {
@@ -415,6 +439,55 @@ export default function Admin() {
 
           <button onClick={savePricing} className="bg-ink-900 text-white text-sm font-bold px-5 py-2.5 rounded-2xl hover:bg-ink-800">Salvar preços e promoção</button>
           {priceMsg && <p className="text-sm font-bold">{priceMsg}</p>}
+        </div>
+
+        {/* central financeira */}
+        <div className="card p-5">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="font-extrabold text-lg tracking-tight">💰 Central financeira (Mercado Pago)</p>
+            <button onClick={loadFin} className="text-xs font-bold border border-ink-200 bg-white rounded-xl px-3 py-2">↻ Carregar pagamentos</button>
+          </div>
+          {finMsg && <p className="text-sm font-bold mt-2">{finMsg}</p>}
+          {fin ? (
+            <div className="mt-3 space-y-3">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-2xl bg-emerald-50 border border-emerald-200 py-3">
+                  <p className="text-[11px] font-bold text-emerald-600">Recebido</p>
+                  <p className="font-extrabold">{brl(fin.totals.receivedCents)}</p>
+                </div>
+                <div className="rounded-2xl bg-red-50 border border-red-200 py-3">
+                  <p className="text-[11px] font-bold text-red-500">Estornado</p>
+                  <p className="font-extrabold">{brl(fin.totals.refundedCents)}</p>
+                </div>
+                <div className="rounded-2xl bg-ink-50 border border-ink-100 py-3">
+                  <p className="text-[11px] font-bold text-ink-400">Pedidos</p>
+                  <p className="font-extrabold">{fin.totals.count}</p>
+                </div>
+              </div>
+              {!fin.mpEnabled && <p className="hint">⚠️ Sem MERCADOPAGO_ACCESS_TOKEN na VPS — Pix automático desligado.</p>}
+              <div className="overflow-x-auto rounded-2xl border border-ink-100">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-ink-50 text-ink-400 text-left">
+                    {["Data", "Arquivo", "Total", "MP id", "Status", ""].map((h) => <th key={h} className="px-3 py-2 font-bold">{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {(fin.jobs ?? []).map((j: any) => (
+                      <tr key={j.id} className="border-t border-ink-100">
+                        <td className="px-3 py-2 whitespace-nowrap">{dt(j.createdAt)}</td>
+                        <td className="px-3 py-2 font-bold max-w-[130px] truncate">{j.fileName}</td>
+                        <td className="px-3 py-2 font-bold">{brl(j.totalCents)}</td>
+                        <td className="px-3 py-2 font-mono">{j.mpPaymentId ?? "—"}</td>
+                        <td className="px-3 py-2">{j.mpRefunded ? "estornado" : j.status}</td>
+                        <td className="px-3 py-2">{!j.mpRefunded && j.mpPaymentId ? (
+                          <button onClick={() => refundJob(j.id)} className="text-[11px] font-extrabold border border-red-300 text-red-500 rounded-xl px-3 py-1.5">Estornar</button>
+                        ) : null}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : <p className="hint mt-2">Carregue para ver Pix recebidos e estornar sem abrir o Mercado Pago.</p>}
         </div>
 
         {/* reembolsos */}
