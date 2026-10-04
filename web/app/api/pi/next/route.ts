@@ -19,7 +19,15 @@ function merged(printerId: string) {
 }
 
 // Pi faz polling: GET /api/pi/next?printerSlug=xxx
+// Se PI_API_KEY estiver configurado na VPS, exige header x-pi-key.
+function piAuth(req: Request): boolean {
+  const need = process.env.PI_API_KEY;
+  if (!need) return true;
+  return req.headers.get("x-pi-key") === need;
+}
+
 export async function GET(req: Request) {
+  if (!piAuth(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const slug = searchParams.get("printerSlug") ?? searchParams.get("printerId");
   const printer = merged(slug ?? "");
@@ -33,6 +41,7 @@ export async function GET(req: Request) {
 
 // Pi confirma: POST { jobId, ok: true }
 export async function POST(req: Request) {
+  if (!piAuth(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { jobId, ok } = await req.json();
   const job = store.jobs.get(jobId);
   if (!job) return NextResponse.json({ error: "job não encontrado" }, { status: 404 });

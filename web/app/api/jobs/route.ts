@@ -10,21 +10,30 @@ export async function POST(req: Request) {
   const rl = rateLimit(req, "jobs-post", 30, 60 * 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: `Muitos pedidos seguidos. Tente em ${rl.retryAfter}s.` }, { status: 429 });
   const body = await req.json();
-  const { printerSlug, fileName, fileType, pages, copies, fileDataUrl, pagesPerSheet, landscape, couponCode } = body;
+  const { printerSlug, fileName, fileType, pages, fileDataUrl, pagesPerSheet, landscape, couponCode } = body;
+  const copies = Math.min(100, Math.max(1, Number(body.copies ?? 1) || 1));
 
   const printer = getPrinterBySlug(printerSlug);
   if (!printer) return NextResponse.json({ error: "Impressora não encontrada" }, { status: 404 });
   const liveStatus = store.meta.get(printer.id).status ?? printer.status;
   if (liveStatus !== "online") return NextResponse.json({ error: "Impressora offline no momento" }, { status: 409 });
   if (!pages?.length) return NextResponse.json({ error: "Selecione ao menos 1 página" }, { status: 400 });
+  if (pages.length > 100) return NextResponse.json({ error: "Máximo 100 páginas por arquivo" }, { status: 400 });
   if (fileType === "image" && fileDataUrl) {
     const imgErr = checkDataUrl(fileDataUrl, "image");
     if (imgErr) return NextResponse.json({ error: imgErr }, { status: 400 });
   }
+  if (fileType !== "image" && fileDataUrl) {
+    const pdfErr = checkDataUrl(fileDataUrl, "pdf");
+    if (pdfErr) return NextResponse.json({ error: pdfErr }, { status: 400 });
+  }
+  if (fileDataUrl && fileDataUrl.length > 2_000_000) {
+    return NextResponse.json({ error: "Arquivo grande demais para envio direto (limite ~1,5 MB). Comprima ou use imagem." }, { status: 413 });
+  }
 
   // Impressora somente frente: 1 página por folha (sem duplex)
   const perSheet = [1, 2, 4, 6, 9].includes(Number(pagesPerSheet)) ? Number(pagesPerSheet) : 1;
-  const sheets = calcSheets(pages.length, copies ?? 1, false, perSheet);
+  const sheets = calcSheets(pages.length, copies, false, perSheet);
   let { totalCents } = calcTotal(sheets, effectiveTiers(printer.id, printer.tiers));
 
   // cupom de desconto
@@ -50,7 +59,7 @@ export async function POST(req: Request) {
     fileName: fileName ?? "documento",
     fileType: fileType === "image" ? "image" : "pdf",
     pages,
-    copies: copies ?? 1,
+    copies,
     duplex: false,
     pagesPerSheet: perSheet,
     landscape: Boolean(landscape),
@@ -60,14 +69,17 @@ export async function POST(req: Request) {
     couponCode: appliedCoupon,
     status: "awaiting_payment",
     createdAt: new Date().toISOString(),
-    fileDataUrl: fileDataUrl?.slice(0, 2_000_000), // limite MVP 2MB base64
+    fileDataUrl,
   };
   store.jobs.save(job);
   return NextResponse.json({ job });
 }
 
-// Simula confirmação de pagamento Pix (Mercado Pago entra aqui)
+// Confirmação de pagamento: em produção SÓ via Pix (webhook/polling).
+// O mock direto existe apenas para dev sem MERCADOPAGO_ACCESS_TOKEN.
 export async function PUT(req: Request) {
+  const { mpEnabled } = await import("@/lib/mercadopago");
+  if (mpEnabled()) return NextResponse.json({ error: "Use o Pix para liberar a impressão" }, { status: 403 });
   const { jobId } = await req.json();
   const job = store.jobs.get(jobId);
   if (!job) return NextResponse.json({ error: "Job não encontrado" }, { status: 404 });

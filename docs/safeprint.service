@@ -1,13 +1,15 @@
 [Unit]
-Description=SafePrint web + pi-agent
-After=network.target cups.service
+Description=SafePrint web (NEXTJS - ver docs/safeprint-agent.service para a caixa)
+After=network.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/safeprint/web
+User=www-data
+WorkingDirectory=/root/safeprint/web
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
-ExecStart=/bin/bash -c 'cd /home/pi/safeprint/web && npm run start & PRINTER_SLUG=unifacef-bloco-a-x7k2 API_BASE=http://localhost:3000 CUPS_PRINTER=Brother python3 /home/pi/safeprint/pi-agent/agent.py'
+ExecStart=/usr/bin/npm run start -- -p 3000
 Restart=always
 RestartSec=5
 

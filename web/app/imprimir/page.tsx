@@ -706,7 +706,7 @@ export default function Home() {
                 {pixCopy && (
                   <button onClick={() => navigator.clipboard?.writeText(pixCopy)} className="chip border-2 border-ink-200 bg-white px-4 py-2 font-mono text-[11px] break-all max-w-full">📋 Copiar código Pix</button>
                 )}
-                <p className="hint">Pagou? Aguarde, liberamos sozinho… (ou <button onClick={mockPay} className="underline font-bold">simular em dev</button>)</p>
+                <p className="hint">Pagou? Aguarde, liberamos sozinho…{process.env.NODE_ENV !== "production" && <> (ou <button onClick={mockPay} className="underline font-bold">simular em dev</button>)</>}</p>
               </>
             )}
           </section>

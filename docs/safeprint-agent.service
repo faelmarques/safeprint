@@ -1,0 +1,21 @@
+[Unit]
+Description=SafePrint pi-agent (caixa de impressão)
+After=network.target cups.service
+Wants=cups.service
+
+[Service]
+Type=simple
+User=safeprint
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="PRINTER_SLUG=troque-pelo-slug-longo"
+Environment="API_BASE=https://safeprint.enviofacil.pro"
+Environment="CUPS_PRINTER=Brother"
+Environment="POLL_SECONDS=5"
+# Opcional (recomendado): mesma chave do PI_API_KEY na VPS
+# Environment="PI_API_KEY=troque-por-valor-longo"
+ExecStart=/usr/bin/python3 /home/safeprint/safeprint/pi-agent/agent.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

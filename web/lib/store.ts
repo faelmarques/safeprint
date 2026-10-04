@@ -81,7 +81,9 @@ export interface PricingConfig {
 
 export function isAdmin(req: Request): boolean {
   const key = req.headers.get("x-admin-key") ?? "";
-  return key !== "" && key === (process.env.ADMIN_PASSWORD || "admin");
+  const expected = process.env.ADMIN_PASSWORD;
+  if (!expected) return key !== "" && key === "admin" && process.env.NODE_ENV !== "production";
+  return key !== "" && key === expected;
 }
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -118,7 +120,10 @@ function read<T>(f: string, fallback: T): T {
 }
 function write(f: string, v: unknown) {
   ensure();
-  fs.writeFileSync(f, JSON.stringify(v, null, 2));
+  // escrita atômica: nunca deixa JSON meio-escrito num crash/queda de luz
+  const tmp = `${f}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(v, null, 2));
+  fs.renameSync(tmp, f);
 }
 
 export const store = {

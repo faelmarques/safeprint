@@ -49,6 +49,8 @@ export async function POST(req: Request) {
 // Consulta status (para polling no front quando webhook atrasar).
 // GET /api/payments/pix?paymentId=123
 export async function GET(req: Request) {
+  const rl = rateLimit(req, "pix-status", 60, 60 * 1000);
+  if (!rl.ok) return NextResponse.json({ error: "Muitas consultas. Aguarde." }, { status: 429 });
   const { searchParams } = new URL(req.url);
   const paymentId = searchParams.get("paymentId");
   if (!paymentId) return NextResponse.json({ error: "paymentId obrigatório" }, { status: 400 });

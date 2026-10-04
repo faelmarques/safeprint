@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/store";
 import { getMpPayment } from "@/lib/mercadopago";
+import { rateLimit } from "@/lib/ratelimit";
 
 // Webhook Mercado Pago: configure em https://www.mercadopago.com.br/developers/panel
 // URL: https://SEU-DOMINIO/api/webhooks/mercadopago (evento payment)
 export async function POST(req: Request) {
+  const rl = rateLimit(req, "mp-webhook", 120, 60 * 1000);
+  if (!rl.ok) return NextResponse.json({ ok: true });
   const url = new URL(req.url);
   const body = await req.json().catch(() => ({}));
   const id =
