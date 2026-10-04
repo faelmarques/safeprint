@@ -63,6 +63,9 @@ export default function Home() {
   const [pixCopy, setPixCopy] = useState("");
   const [pixId, setPixId] = useState("");
   const [payerEmail, setPayerEmail] = useState("");
+  const [offlineMsg, setOfflineMsg] = useState("");
+  const [liveStatus, setLiveStatus] = useState("");
+  const [queueAhead, setQueueAhead] = useState(0);
 
   const previewRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -83,7 +86,11 @@ export default function Home() {
       const q = new URLSearchParams(window.location.search).get("p");
       if (q) {
         const found = (d.printers ?? []).find((p: Printer) => p.slug === q || p.id === q);
-        if (found) { setSlug(found.slug); setStep(2); }
+        if (found) {
+          setSlug(found.slug);
+          if (found.status === "online") setStep(2);
+          else setOfflineMsg(found.status === "maintenance" ? "⚠️ Máquina em pausa (sem papel ou manutenção). Avise o operador ou volte em instantes." : "⚠️ Máquina offline no momento. Volte em instantes.");
+        }
       }
     }).catch(() => {});
   }, []);
@@ -334,15 +341,46 @@ export default function Home() {
   useEffect(() => {
     if (!pixId || step !== 4) return;
     let stop = false;
+    let tries = 0;
     const t = setInterval(async () => {
       try {
+        tries++;
         const r = await fetch(`/api/payments/pix?paymentId=${pixId}`);
         const d = await r.json();
+        if (d.jobs?.some((j: any) => j.status === "expired" || j.status === "failed")) {
+          clearInterval(t);
+          if (!stop) setErr("Pedido expirou antes do pagamento. Refaça o pedido.");
+          return;
+        }
         if (d.status === "approved" && !stop) { clearInterval(t); finishPaid(); }
+        if (tries > 75 && !stop) { clearInterval(t); setErr("Pix ainda não confirmado após 5min. Se pagou, aguarde o estorno ou fale com o operador."); }
       } catch {}
     }, 4000);
     return () => { stop = true; clearInterval(t); };
   }, [pixId, step]);
+
+  // Status em tempo real do pedido na etapa final
+  useEffect(() => {
+    if (step !== 5 || !jobIds.length) return;
+    let stop = false;
+    let tries = 0;
+    const check = async () => {
+      try {
+        const r = await fetch(`/api/jobs/${jobIds[0]}`);
+        const d = await r.json();
+        if (stop || !r.ok) return;
+        setLiveStatus(d.job.status);
+        setQueueAhead(d.queueAhead ?? 0);
+      } catch {}
+    };
+    check();
+    const t = setInterval(async () => {
+      tries++;
+      if (tries > 45) { clearInterval(t); return; }
+      await check();
+    }, 4000);
+    return () => { stop = true; clearInterval(t); };
+  }, [step, jobIds]);
 
   async function sendRefund() {
     setLoading(true); setRefundOk(""); setErr("");
@@ -462,6 +500,7 @@ export default function Home() {
               </div>
               {codeErr && <p className="text-sm font-bold text-red-500">{codeErr}</p>}
             </div>
+            {offlineMsg && <p className="rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm font-bold p-3">{offlineMsg}</p>}
             {!printers.length && <p className="hint">Carregando…</p>}
           </section>
         )}
@@ -722,6 +761,16 @@ export default function Home() {
                   <p className="hint">Pedido <code className="font-mono bg-ink-50 px-1.5 py-0.5 rounded">{jobIds[0]?.slice(0, 8)}</code> • {totalSheets} folha(s) • aguarde ~30s na saída da caixa</p>
                 </div>
 
+                <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4 text-left text-sm space-y-1">
+                  <p className="font-extrabold text-xs text-ink-400 tracking-widest">COMPROVANTE</p>
+                  <div className="flex justify-between font-medium"><span>Protocolo</span><code className="font-mono font-bold">{jobIds[0]?.slice(0, 8)}</code></div>
+                  <div className="flex justify-between font-medium"><span>Máquina</span><b>{printer?.name}</b></div>
+                  <div className="flex justify-between font-medium"><span>Folhas × valor</span><span>{totalSheets} × {brl(price.unitCents)}</span></div>
+                  <div className="flex justify-between font-extrabold text-base"><span>Total pago</span><span>{brl(price.totalCents)}</span></div>
+                  <div className="flex justify-between font-medium"><span>Status</span><b>{liveStatus === "printing" ? "🖨️ Imprimindo…" : liveStatus === "done" ? "✅ Concluído" : liveStatus === "failed" ? "❌ Falhou (estorno automático)" : queueAhead > 0 ? `⏳ Na fila (${queueAhead} na frente)` : "⏳ Na fila"}</b></div>
+                  <button onClick={() => window.print()} className="text-xs font-bold text-brand-600 underline mt-1">🖨️ Salvar/imprimir comprovante</button>
+                </div>
+
                 <div className="rounded-2xl bg-brand-50 border border-brand-100 p-3 text-xs font-bold text-brand-700">
                   🎁 Fidelidade: {loyalty % 10 === 0 && loyalty > 0 ? "você ganhou 10 folhas grátis no próximo ciclo!" : `sua ${loyalty % 10 === 0 ? 10 : loyalty % 10}ª impressão — faltam ${10 - (loyalty % 10 === 0 ? 10 : loyalty % 10)} para ganhar 10 folhas grátis`}
                 </div>
@@ -825,7 +874,7 @@ export default function Home() {
                 )}
               </>
             )}
-            <button onClick={() => { setStep(1); setFiles([]); setJobIds([]); setPixQr(""); setPixCopy(""); setPixId(""); setPayerEmail(""); setRange("todas"); setCopies(1); setCouponApplied(null); setCouponInput(""); setRefundPhoto(""); setRefundOk(""); setRefundMotive(""); setRefundDesc(""); setRefundName(""); setRefundZap(""); setShowRefund(false); setConfirmedOk(false); setCancelled(false); }} className="text-xs font-bold text-ink-300 underline">Nova impressão</button>
+            <button onClick={() => { setStep(1); setFiles([]); setJobIds([]); setPixQr(""); setPixCopy(""); setPixId(""); setPayerEmail(""); setLiveStatus(""); setQueueAhead(0); setOfflineMsg(""); setRange("todas"); setCopies(1); setCouponApplied(null); setCouponInput(""); setRefundPhoto(""); setRefundOk(""); setRefundMotive(""); setRefundDesc(""); setRefundName(""); setRefundZap(""); setShowRefund(false); setConfirmedOk(false); setCancelled(false); }} className="text-xs font-bold text-ink-300 underline">Nova impressão</button>
           </section>
         )}
 

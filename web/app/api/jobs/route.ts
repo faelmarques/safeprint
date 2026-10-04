@@ -2,13 +2,29 @@ import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { getPrinterBySlug } from "@/lib/printers";
 import { calcSheets, calcTotal } from "@/lib/pricing";
-import { store, effectiveTiers, type PrintJob } from "@/lib/store";
+import { store, effectiveTiers, sweepExpired, type PrintJob } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 import { checkDataUrl } from "@/lib/filefilter";
+
+// Conta páginas do PDF via /Count (mesma heurística do front). 0 = indeterminado.
+function countPdfPages(dataUrl: string): number {
+  try {
+    const b64 = dataUrl.split(",", 2)[1] ?? "";
+    const text = Buffer.from(b64, "base64").toString("latin1");
+    let best = 0;
+    const re = /\/Type\s*\/Pages[\s\S]*?\/Count\s+(\d+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text))) best = Math.max(best, Number(m[1]));
+    return best;
+  } catch {
+    return 0;
+  }
+}
 
 export async function POST(req: Request) {
   const rl = rateLimit(req, "jobs-post", 30, 60 * 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: `Muitos pedidos seguidos. Tente em ${rl.retryAfter}s.` }, { status: 429 });
+  sweepExpired();
   const body = await req.json();
   const { printerSlug, fileName, fileType, pages, fileDataUrl, pagesPerSheet, landscape, couponCode } = body;
   const copies = Math.min(100, Math.max(1, Number(body.copies ?? 1) || 1));
@@ -30,6 +46,15 @@ export async function POST(req: Request) {
   if (fileDataUrl && fileDataUrl.length > 2_000_000) {
     return NextResponse.json({ error: "Arquivo grande demais para envio direto (limite ~1,5 MB). Comprima ou use imagem." }, { status: 413 });
   }
+  // Validação server-side: páginas pedidas não podem exceder o total real do PDF (client mente)
+  if (fileType !== "image" && fileDataUrl) {
+    const total = countPdfPages(fileDataUrl);
+    if (total > 0) {
+      if (pages.some((p: number) => p < 1 || p > total)) {
+        return NextResponse.json({ error: `PDF tem ${total} página(s). Ajuste o intervalo.` }, { status: 400 });
+      }
+    }
+  }
 
   // Impressora somente frente: 1 página por folha (sem duplex)
   const perSheet = [1, 2, 4, 6, 9].includes(Number(pagesPerSheet)) ? Number(pagesPerSheet) : 1;
@@ -48,6 +73,9 @@ export async function POST(req: Request) {
   }
 
   const remaining = store.paper.get(printer.id, printer.paperCurrent);
+  if (remaining < 150) {
+    return NextResponse.json({ error: `Máquina com pouco papel (restam ${remaining}). Recarga necessária antes de novos pedidos.` }, { status: 409 });
+  }
   if (sheets > remaining) {
     return NextResponse.json({ error: `Papel insuficiente na máquina (restam ${remaining}). Tente menos folhas.` }, { status: 409 });
   }
@@ -69,6 +97,7 @@ export async function POST(req: Request) {
     couponCode: appliedCoupon,
     status: "awaiting_payment",
     createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     fileDataUrl,
   };
   store.jobs.save(job);

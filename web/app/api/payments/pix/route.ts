@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
-import { store } from "@/lib/store";
+import { store, sweepExpired } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 import { createPixPayment, mpEnabled } from "@/lib/mercadopago";
 
@@ -9,6 +9,7 @@ import { createPixPayment, mpEnabled } from "@/lib/mercadopago";
 export async function POST(req: Request) {
   const rl = rateLimit(req, "pix-create", 20, 60 * 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: `Muitas tentativas. Tente em ${rl.retryAfter}s.` }, { status: 429 });
+  sweepExpired();
   if (!mpEnabled()) return NextResponse.json({ error: "Pix automático não configurado (sem MERCADOPAGO_ACCESS_TOKEN)" }, { status: 503 });
 
   const { jobIds, payerEmail } = await req.json().catch(() => ({}));
@@ -69,7 +70,10 @@ export async function GET(req: Request) {
         }
       }
     }
-    return NextResponse.json({ status: data.status });
+    const ref: string = String(data.external_reference ?? "");
+    const ids = ref.split("|")[1]?.split(",") ?? [];
+    const jobs = ids.map((id) => store.jobs.get(id)).filter(Boolean).map((j) => ({ id: j!.id, status: j!.status }));
+    return NextResponse.json({ status: data.status, jobs });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 502 });
   }

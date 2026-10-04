@@ -3,7 +3,7 @@
 import fs from "fs";
 import path from "path";
 
-export type JobStatus = "awaiting_payment" | "queued" | "printing" | "done" | "failed";
+export type JobStatus = "awaiting_payment" | "queued" | "printing" | "done" | "failed" | "expired";
 export interface PrintJob {
   id: string;
   printerId: string;
@@ -21,6 +21,9 @@ export interface PrintJob {
   couponCode?: string;
   status: JobStatus;
   createdAt: string;
+  expiresAt?: string; // awaiting_payment morre em 15min
+  claimedAt?: string; // claim anti-duplo do agent
+  claimToken?: string;
   fileDataUrl?: string; // MVP: base64 pequeno. Produção: URL S3 privada com expiração.
   mpPaymentId?: number;
   mpStatus?: string;
@@ -137,7 +140,20 @@ export const store = {
       write(JOBS_FILE, all);
     },
     pendingForPrinter(printerId: string): PrintJob[] {
-      return read<PrintJob[]>(JOBS_FILE, []).filter((j) => j.printerId === printerId && j.status === "queued");
+      sweepExpired();
+      const now = Date.now();
+      return read<PrintJob[]>(JOBS_FILE, []).filter((j) => {
+        if (j.printerId !== printerId) return false;
+        if (j.status === "queued") return true;
+        // reclaim: claim travado (crash do agent) volta pra fila após 3min
+        if (j.status === "printing" && j.claimedAt && now - Date.parse(j.claimedAt) > 3 * 60 * 1000) return true;
+        return false;
+      });
+    },
+    // visão pública: sem bytes do arquivo
+    pub(job: PrintJob) {
+      const { fileDataUrl: _drop, ...rest } = job;
+      return rest;
     },
   },
   refunds: {
@@ -209,9 +225,16 @@ export function effectiveTiers(printerId: string, fallback: import("./printers")
 }
 
 export async function notifyLowPaper(printerName: string, remaining: number) {
+  return notifyTelegram(`🧻 SafePrint: papel baixo em "${printerName}" — restam ${remaining} folhas. Recarregue!`);
+}
+
+export async function notifyPaused(printerName: string, reason: string) {
+  return notifyTelegram(`⛔ SafePrint: "${printerName}" pausada automaticamente (${reason}). Vendas interrompidas até recarregar.`);
+}
+
+async function notifyTelegram(msg: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  const msg = `🧻 SafePrint: papel baixo em "${printerName}" — restam ${remaining} folhas. Recarregue!`;
   if (!token || !chatId) {
     console.log("[NOTIFY STUB]", msg);
     return { sent: false, reason: "TELEGRAM_* não configurado (stub em log)" };
@@ -227,4 +250,30 @@ export async function notifyLowPaper(printerName: string, remaining: number) {
     console.error(e);
     return { sent: false, reason: String(e) };
   }
+}
+
+// Expira pedidos não pagos após 15min (chamado no início das rotas quentes).
+export function sweepExpired(): number {
+  const all = read<PrintJob[]>(JOBS_FILE, []);
+  const now = Date.now();
+  let n = 0;
+  for (const j of all) {
+    if (j.status === "awaiting_payment" && j.expiresAt && Date.parse(j.expiresAt) < now) {
+      j.status = "expired";
+      j.fileDataUrl = undefined;
+      n++;
+    }
+  }
+  if (n) write(JOBS_FILE, all);
+  return n;
+}
+
+// Pausa a máquina quando o papel zera (vendas param + alerta).
+export async function autoPauseIfEmpty(printerId: string, printerName: string, remaining: number) {
+  if (remaining > 0) return false;
+  const m = store.meta.get(printerId);
+  if (m.status === "maintenance") return true;
+  store.meta.set(printerId, { status: "maintenance" });
+  await notifyPaused(printerName, "sem papel");
+  return true;
 }

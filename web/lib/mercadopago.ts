@@ -73,3 +73,19 @@ export async function refundMpPayment(id: string | number): Promise<any> {
   if (!res.ok) throw new Error(data?.message ?? "Erro ao estornar no Mercado Pago");
   return data;
 }
+
+// Valida assinatura do webhook (x-signature: t=...,v1=...).
+// Sem MP_WEBHOOK_SECRET configurado, retorna null (aceita por compatibilidade, com rate limit).
+export async function verifyWebhookSignature(req: Request, dataId: string): Promise<boolean | null> {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) return null;
+  const header = req.headers.get("x-signature") ?? "";
+  const ts = header.split(",").find((p) => p.trim().startsWith("ts="))?.split("=")[1]?.trim() ?? "";
+  const v1 = header.split(",").find((p) => p.trim().startsWith("v1="))?.split("=")[1]?.trim() ?? "";
+  const requestId = req.headers.get("x-request-id") ?? "";
+  if (!ts || !v1) return false;
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+  const { createHmac } = await import("crypto");
+  const digest = createHmac("sha256", secret).update(manifest).digest("hex");
+  return digest === v1;
+}

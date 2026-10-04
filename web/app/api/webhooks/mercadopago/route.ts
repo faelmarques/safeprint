@@ -15,6 +15,14 @@ export async function POST(req: Request) {
   if (!id) return NextResponse.json({ ok: true });
 
   try {
+    const { verifyWebhookSignature } = await import("@/lib/mercadopago");
+    const sig = await verifyWebhookSignature(req, String(id));
+    if (sig === false) return NextResponse.json({ error: "assinatura inválida" }, { status: 401 });
+  } catch {
+    return NextResponse.json({ ok: true });
+  }
+
+  try {
     const data = await getMpPayment(id);
     if (String(data.status) === "approved") {
       const ref: string = String(data.external_reference ?? "");
