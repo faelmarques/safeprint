@@ -214,7 +214,7 @@ export default function Landing() {
                 </span>
               </div>
               <div className="flex items-center gap-4 mt-3">
-                <a href={`/imprimir?p=${p.slug}`} className="text-sm font-extrabold text-brand-600">Imprimir aqui →</a>
+                <span className="text-sm font-extrabold text-ink-400">📷 Escaneie o QR colado na máquina para imprimir</span>
                 {p.address && <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.address)}`} target="_blank" className="text-xs font-bold text-ink-400 underline">📍 Ver no mapa</a>}
               </div>
             </div>

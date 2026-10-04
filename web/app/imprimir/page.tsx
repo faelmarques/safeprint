@@ -400,43 +400,23 @@ export default function Home() {
         )}
 
         {step === 1 && (
-          <section className="card p-6 space-y-4">
+          <section className="card p-6 space-y-4 text-center">
+            <div className="mx-auto size-14 rounded-2xl bg-ink-900 text-white flex items-center justify-center text-2xl shadow-card">📷</div>
             <div>
-              <h2 className="font-extrabold text-lg tracking-tight">Onde você está?</h2>
-              <p className="hint">Pelo QR a máquina já vem selecionada. Senão, toque na unidade:</p>
+              <h2 className="font-extrabold text-lg tracking-tight">Escaneie o QR Code da impressora</h2>
+              <p className="hint">Aponte a câmera do celular para o QR colado na caixa. O pedido só abre com o código da máquina — sem QR, sem impressão.</p>
             </div>
-            <div className="grid gap-3">
-              {printers.map((p) => {
-                const sel = slug === p.slug;
-                return (
-                  <button key={p.id} onClick={() => { setSlug(p.slug); setStep(2); }}
-                    className={`text-left rounded-2xl border-2 p-4 transition bg-white ${sel ? "border-brand-500 ring-4 ring-brand-500/10" : "border-ink-100 hover:border-brand-300"}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-extrabold text-[15px]">{p.name}</p>
-                        <p className="text-xs text-ink-400 font-medium">{p.location}</p>
-                      </div>
-                      <span className={`chip ${p.status === "online" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-600 border border-red-200"}`}>
-                        {p.status === "online" ? "● disponível" : "● offline"}
-                      </span>
-                    </div>
-                    <div className="flex gap-2 mt-3 text-[11px] font-bold">
-                      <span className="chip bg-ink-50 text-ink-600 border border-ink-100">🧻 {p.paperCurrent} folhas</span>
-                      <span className="chip bg-brand-50 text-brand-700 border border-brand-100">a partir de {brl(Math.min(...p.tiers.map((t) => t.pricePerSheetCents)))}/folha</span>
-                      <span className="chip bg-ink-50 text-ink-600 border border-ink-100">1 pág/folha</span>
-                    </div>
-                  </button>
-                );
-              })}
-              {!printers.length && <p className="hint">Carregando impressoras…</p>}
-            </div>
+            {!printers.length && <p className="hint">Carregando…</p>}
+            {printers.length > 0 && !printer && (
+              <p className="rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-bold p-3">⚠️ Código da máquina não identificado. Escaneie o QR colado nela para continuar.</p>
+            )}
           </section>
         )}
 
         {step >= 2 && printer && (
           <div className="card px-4 py-3 flex items-center justify-between">
             <p className="text-[13px]"><span className="text-ink-400 font-medium">Imprimindo em</span> <b>{printer.name}</b> <span className="text-ink-400">• {printer.location}</span></p>
-            <button className="text-xs font-bold text-brand-600 hover:underline shrink-0 ml-3" onClick={() => setStep(1)}>Trocar</button>
+            <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px]">🔒 via QR</span>
           </div>
         )}
 

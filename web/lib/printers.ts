@@ -29,7 +29,7 @@ export interface Printer {
 export const PRINTERS: Printer[] = [
   {
     id: "printer-unifacef-01",
-    slug: "unifacef-bloco-a-x7k2",
+    slug: "unifacef-bloco-a-324149f6f74c4dc95861fe9be88a90aee327feabca140112",
     name: "UniFACEF — Bloco A",
     location: "Bloco A, térreo, ao lado da cantina",
     address: "Av. Dr. Ismael Alonso y Alonso, 2400 - Franca/SP",
@@ -42,7 +42,7 @@ export const PRINTERS: Printer[] = [
   },
   {
     id: "printer-demo-centro",
-    slug: "franca-centro-demo-9q1w",
+    slug: "franca-centro-381319d5dd979b38e301aacad3a526166581302f3c9162fe",
     name: "Franca Centro — Demo",
     location: "Papelaria parceira (demonstração)",
     address: "Rua do Comércio, 100 - Centro, Franca/SP",
