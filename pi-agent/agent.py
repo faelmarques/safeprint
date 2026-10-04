@@ -45,7 +45,25 @@ def print_file(job):
     pps = job.get("pagesPerSheet") or 1
     if pps and int(pps) > 1:
         opts.append(f"number-up-pages={int(pps)}")
-    cmd = ["lp", "-d", CUPS_PRINTER, "-n", str(copies), "-o", " ".join(opts), path]
+    cmd = ["lp", "-d", CUPS_PRINTER, "-n", str(copies), "-o", " ".join(opts)]
+    # intervalo de páginas do pedido (ex: [1,2,3,5] -> -P 1-3,5)
+    pages = job.get("pages") or []
+    if job.get("fileType") == "pdf" and pages:
+        try:
+            s = sorted(set(int(p) for p in pages))
+            ranges = []
+            a = prev = s[0]
+            for p in s[1:]:
+                if p == prev + 1:
+                    prev = p
+                    continue
+                ranges.append(str(a) if a == prev else f"{a}-{prev}")
+                a = prev = p
+            ranges.append(str(a) if a == prev else f"{a}-{prev}")
+            cmd += ["-P", ",".join(ranges)]
+        except Exception:
+            pass
+    cmd.append(path)
     print("exec:", " ".join(cmd))
     try:
         subprocess.run(cmd, check=True, timeout=60)

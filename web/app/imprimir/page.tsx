@@ -269,13 +269,17 @@ export default function Home() {
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         const baked = f.type === "image" ? await bakeImage(f) : undefined;
+        const dataUrl = f.type === "image" ? baked : f.dataUrl;
+        if (dataUrl && dataUrl.length > 1_800_000) {
+          throw new Error(`${f.f.name}: PDF muito grande para envio direto (limite ~1,3 MB). Comprima em ilovepdf.com ou mande como imagem. S3 com arquivos grandes entra na próxima versão.`);
+        }
         const r = await fetch("/api/jobs", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             printerSlug: printer.slug, fileName: f.f.name ?? "documento",
             fileType: f.type, pages: perFile[i].pages, copies, duplex: false, pagesPerSheet: f.perSheet,
             landscape: f.landscape,
-            fileDataUrl: f.type === "image" ? baked : undefined,
+            fileDataUrl: dataUrl,
             couponCode: couponApplied?.code,
           }),
         });
