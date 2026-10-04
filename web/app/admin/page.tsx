@@ -35,6 +35,7 @@ export default function Admin() {
   const [fName, setFName] = useState("");
   const [fLoc, setFLoc] = useState("");
   const [fAddr, setFAddr] = useState("");
+  const [fCode, setFCode] = useState("");
 
   // preços e promoções
   const [tiers, setTiers] = useState<{ minSheets: string; price: string }[]>([]);
@@ -70,7 +71,7 @@ export default function Admin() {
         setSelectedId(p.id);
         setFQty(String(p.paperCurrent)); setFCap(String(p.paperCapacity));
         setFAlert(String(p.paperAlertAt)); setFStatus(p.status);
-        setFName(p.name ?? ""); setFLoc(p.location ?? ""); setFAddr(p.address ?? "");
+        setFName(p.name ?? ""); setFLoc(p.location ?? ""); setFAddr(p.address ?? ""); setFCode(p.code ?? "");
       }
     } finally { setLoading(false); }
   }, [selectedId]);
@@ -89,7 +90,7 @@ export default function Admin() {
     setSelectedId(p.id);
     setFQty(String(p.paperCurrent)); setFCap(String(p.paperCapacity));
     setFAlert(String(p.paperAlertAt)); setFStatus(p.status);
-    setFName(p.name ?? ""); setFLoc(p.location ?? ""); setFAddr(p.address ?? "");
+    setFName(p.name ?? ""); setFLoc(p.location ?? ""); setFAddr(p.address ?? ""); setFCode(p.code ?? "");
     setMsg("");
   }
 
@@ -98,7 +99,7 @@ export default function Admin() {
     const r = await fetch("/api/admin/paper", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-admin-key": key },
-      body: JSON.stringify({ printerId: selectedId, qty: fQty, capacity: fCap, alertAt: fAlert, status: fStatus, name: fName, location: fLoc, address: fAddr }),
+      body: JSON.stringify({ printerId: selectedId, qty: fQty, capacity: fCap, alertAt: fAlert, status: fStatus, name: fName, location: fLoc, address: fAddr, code: fCode }),
     });
     const d = await r.json();
     if (!r.ok) { setMsg("⚠️ " + (d.error ?? "Erro ao salvar")); return; }
@@ -298,6 +299,11 @@ export default function Admin() {
                     <option value="maintenance">● Manutenção</option>
                     <option value="offline">● Offline</option>
                   </select></label>
+              </div>
+              <div className="flex items-end gap-2 mt-3">
+                <label className="text-xs font-bold text-ink-500 flex-1">Código da máquina (6 dígitos)
+                  <input value={fCode} onChange={(e) => setFCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="012345" className="input mt-1 font-mono text-center tracking-[0.3em]" /></label>
+                <button onClick={() => setFCode(String(Math.floor(Math.random() * 1000000)).padStart(6, "0"))} className="text-xs font-bold border border-ink-200 bg-white rounded-xl px-3 py-2.5 whitespace-nowrap">🎲 Gerar</button>
               </div>
               <button onClick={savePrinter} className="mt-3 bg-ink-900 text-white text-sm font-bold px-5 py-2.5 rounded-2xl hover:bg-ink-800">Salvar alterações</button>
               {msg && <p className="text-sm font-bold mt-2">{msg}</p>}

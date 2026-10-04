@@ -36,6 +36,7 @@ export async function GET(req: Request) {
     const pj = paid.filter((j) => j.printerId === p.id);
     return {
       ...p,
+      code: meta[p.id]?.code ?? p.code,
       status: meta[p.id]?.status ?? p.status,
       paperCapacity: meta[p.id]?.paperCapacity ?? p.paperCapacity,
       paperAlertAt: meta[p.id]?.paperAlertAt ?? p.paperAlertAt,

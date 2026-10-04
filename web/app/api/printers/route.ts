@@ -6,6 +6,7 @@ export async function GET() {
   const meta = store.meta.all();
   const printers = PRINTERS.map((p) => ({
     ...p,
+    code: meta[p.id]?.code ?? p.code,
     status: meta[p.id]?.status ?? p.status,
     paperCapacity: meta[p.id]?.paperCapacity ?? p.paperCapacity,
     paperAlertAt: meta[p.id]?.paperAlertAt ?? p.paperAlertAt,

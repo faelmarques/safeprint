@@ -5,7 +5,7 @@ import { PRINTERS } from "@/lib/printers";
 // Gestão da impressora: POST { printerId, qty?, capacity?, alertAt?, status? }
 export async function POST(req: Request) {
   if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const { printerId, qty, capacity, alertAt, status, name, location, address } = await req.json().catch(() => ({}));
+  const { printerId, qty, capacity, alertAt, status, name, location, address, code } = await req.json().catch(() => ({}));
   const printer = PRINTERS.find((p) => p.id === printerId || p.slug === printerId);
   if (!printer) return NextResponse.json({ error: "Impressora não encontrada" }, { status: 404 });
 
@@ -18,6 +18,7 @@ export async function POST(req: Request) {
   if (typeof name === "string" && name.trim()) patch.name = name.trim().slice(0, 80);
   if (typeof location === "string" && location.trim()) patch.location = location.trim().slice(0, 120);
   if (typeof address === "string") patch.address = address.trim().slice(0, 120);
+  if (typeof code === "string" && /^\d{6}$/.test(code.trim())) patch.code = code.trim();
   if (Object.keys(patch).length) store.meta.set(printer.id, patch);
 
   const o = store.meta.get(printer.id);

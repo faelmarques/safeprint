@@ -52,6 +52,7 @@ export interface PaperState {
 
 export interface PrinterOverride {
   status?: "online" | "offline" | "maintenance";
+  code?: string;
   paperCapacity?: number;
   paperAlertAt?: number;
   tiers?: import("./printers").PriceTier[];
