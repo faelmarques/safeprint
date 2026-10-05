@@ -262,8 +262,9 @@ export default function Home() {
         ctx.drawImage(img, cx + (cw - w) / 2, cy + (ch - h) / 2, w, h);
       }
     }
-    // canvas → PNG: strips EXIF / metadados (privacidade)
-    return c.toDataURL("image/png");
+    // canvas → JPEG 0.85: strips EXIF/metadados (privacidade) e cabe no limite
+    // (foto de celular sai com ~200-500KB em vez de 10MB+ do PNG)
+    return c.toDataURL("image/jpeg", 0.85);
   }
 
   async function createJob() {
@@ -275,7 +276,14 @@ export default function Home() {
       const ids: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
-        const baked = f.type === "image" ? await bakeImage(f) : undefined;
+        let baked: string | undefined;
+        if (f.type === "image") {
+          try {
+            baked = await bakeImage(f);
+          } catch {
+            throw new Error(`${f.f.name}: não consegui ler essa foto (se for HEIC do iPhone, abra e exporte como JPG antes).`);
+          }
+        }
         const dataUrl = f.type === "image" ? baked : f.dataUrl;
         if (dataUrl && dataUrl.length > 1_800_000) {
           throw new Error(`${f.f.name}: PDF muito grande para envio direto (limite ~1,3 MB). Comprima em ilovepdf.com ou mande como imagem. S3 com arquivos grandes entra na próxima versão.`);

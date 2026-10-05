@@ -1,7 +1,7 @@
 // Filtro de conteúdo/segurança de uploads (blindado para faculdade).
 // Checa extensão, MIME, magic bytes e padrões perigosos em PDF.
 
-const MAX_BYTES = 15 * 1024 * 1024; // 15 MB
+const MAX_BYTES = 150 * 1024 * 1024; // 150 MB (foto de celular passa direto, comprime no navegador)
 
 export function checkUpload(fileName: string, mime: string, sizeBytes: number): string | null {
   const ext = (fileName.split(".").pop() ?? "").toLowerCase();
@@ -9,7 +9,7 @@ export function checkUpload(fileName: string, mime: string, sizeBytes: number): 
   if (!nameOk) return "Nome de arquivo com caracteres inválidos";
   if (!["pdf", "png", "jpg", "jpeg", "webp"].includes(ext)) return `Formato .${ext} não permitido (use PDF, PNG, JPG ou WEBP)`;
   if (!["application/pdf", "image/png", "image/jpeg", "image/webp"].includes(mime)) return "Tipo de arquivo não permitido";
-  if (sizeBytes > MAX_BYTES) return "Arquivo muito grande (máx. 15 MB)";
+  if (sizeBytes > MAX_BYTES) return "Arquivo muito grande (máx. 150 MB)";
   if (sizeBytes <= 0) return "Arquivo vazio";
   return null;
 }
