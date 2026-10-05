@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
-import { getPrinterBySlug } from "@/lib/printers";
 import { calcSheets, calcTotal } from "@/lib/pricing";
-import { store, effectiveTiers, sweepExpired, type PrintJob } from "@/lib/store";
+import { store, effectiveTiers, sweepExpired, findPrinter, type PrintJob } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 import { checkDataUrl } from "@/lib/filefilter";
 
@@ -29,7 +28,7 @@ export async function POST(req: Request) {
   const { printerSlug, fileName, fileType, pages, fileDataUrl, pagesPerSheet, landscape, couponCode } = body;
   const copies = Math.min(100, Math.max(1, Number(body.copies ?? 1) || 1));
 
-  const printer = getPrinterBySlug(printerSlug);
+  const printer = findPrinter(printerSlug);
   if (!printer) return NextResponse.json({ error: "Impressora não encontrada" }, { status: 404 });
   const liveStatus = store.meta.get(printer.id).status ?? printer.status;
   if (liveStatus !== "online") return NextResponse.json({ error: "Impressora offline no momento" }, { status: 409 });

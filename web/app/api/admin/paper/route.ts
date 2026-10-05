@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { store, isAdmin, type PrinterOverride } from "@/lib/store";
-import { listPrinters } from "@/lib/printers";
 
 // Gestão da impressora: POST { printerId, qty?, capacity?, alertAt?, status? }
 export async function POST(req: Request) {
   if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { printerId, qty, capacity, alertAt, status, name, location, address, code } = await req.json().catch(() => ({}));
-  const printer = listPrinters().find((p) => p.id === printerId || p.slug === printerId);
+  const printer = store.printers.get(String(printerId ?? ""));
   if (!printer) return NextResponse.json({ error: "Impressora não encontrada" }, { status: 404 });
 
   if (qty !== undefined && qty !== "") store.paper.set(printer.id, Math.max(0, Number(qty)));

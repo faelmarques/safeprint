@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { listPrinters } from "@/lib/printers";
-import { store, isAdmin, effectiveTiers } from "@/lib/store";
+import { store, isAdmin, effectiveTiers, listPrinters } from "@/lib/store";
 
 const PAID = ["queued", "printing", "done"];
 

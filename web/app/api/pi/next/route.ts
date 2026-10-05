@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
-import { listPrinters } from "@/lib/printers";
-import { store, notifyLowPaper, autoPauseIfEmpty } from "@/lib/store";
+import { store, notifyLowPaper, autoPauseIfEmpty, listPrinters } from "@/lib/store";
 
 function merged(printerId: string) {
   const base = listPrinters().find((p) => p.id === printerId || p.slug === printerId);

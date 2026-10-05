@@ -60,20 +60,5 @@ export const PRINTERS: Printer[] = [
 
 export function getPrinterBySlug(slug: string | null): Printer | undefined {
   if (!slug) return undefined;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { store } = require("./store");
-    const found = store.printers.get(slug);
-    if (found) return found;
-  } catch {}
   return PRINTERS.find((p) => p.slug === slug || p.id === slug);
-}
-
-export function listPrinters(): Printer[] {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { store } = require("./store");
-    return store.printers.all();
-  } catch {}
-  return PRINTERS;
 }

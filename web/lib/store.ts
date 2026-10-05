@@ -309,6 +309,27 @@ async function notifyTelegram(msg: string) {
   }
 }
 
+// Lista canônica de impressoras (JSON, com overrides de status/papel aplicados).
+export function listPrinters(): Printer[] {
+  const meta = store.meta.all();
+  return store.printers.all().map((p) => ({
+    ...p,
+    status: meta[p.id]?.status ?? p.status,
+    paperCapacity: meta[p.id]?.paperCapacity ?? p.paperCapacity,
+    paperAlertAt: meta[p.id]?.paperAlertAt ?? p.paperAlertAt,
+    name: meta[p.id]?.name ?? p.name,
+    location: meta[p.id]?.location ?? p.location,
+    address: meta[p.id]?.address ?? p.address,
+    code: meta[p.id]?.code ?? p.code,
+    paperCurrent: store.paper.get(p.id, p.paperCurrent),
+  }));
+}
+
+export function findPrinter(idOrSlug: string | null): Printer | undefined {
+  if (!idOrSlug) return undefined;
+  return listPrinters().find((p) => p.id === idOrSlug || p.slug === idOrSlug);
+}
+
 // Expira pedidos não pagos após 15min (chamado no início das rotas quentes).
 export function sweepExpired(): number {
   const all = read<PrintJob[]>(JOBS_FILE, []);
