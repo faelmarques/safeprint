@@ -30,12 +30,13 @@ const FAQS = [
 export default function Landing() {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [promo, setPromo] = useState<{ enabled: boolean; title: string; description: string } | null>(null);
+  const [site, setSite] = useState({ siteName: "SafePrint", tagline: "Impressão autoatendimento", heroBadge: "🎓 Novo no Unifacef • Franca/SP", heroTitle: "Imprima seu trabalho sem fila, sem papelaria.", heroSub: "Chegou na faculdade, lembrou do trabalho? Escaneie o QR da máquina, envie o PDF pelo celular, pague no Pix e retire na hora. Pronto em menos de 1 minuto.", footerNote: "*Horário conforme o local da máquina • Arquivos excluídos em 24h" });
   const [dark, setDark] = useState(false);
   useEffect(() => {
     const d = localStorage.getItem("sp-dark") === "1";
     setDark(d);
     document.documentElement.classList.toggle("dark", d);
-    fetch("/api/printers").then((r) => r.json()).then((d) => { setPrinters(d.printers ?? []); setPromo(d.promo ?? null); }).catch(() => {});
+    fetch("/api/printers").then((r) => r.json()).then((d) => { setPrinters(d.printers ?? []); setPromo(d.promo ?? null); if (d.site) setSite((s) => ({ ...s, ...d.site })); }).catch(() => {});
   }, []);
 
   function toggleDark() {
@@ -53,8 +54,8 @@ export default function Landing() {
           <div className="flex items-center gap-2.5">
             <div className="size-9 rounded-2xl bg-gradient-to-br from-brand-500 to-ink-900 flex items-center justify-center text-white text-lg shadow-pop">⎙</div>
             <div>
-              <p className="font-extrabold tracking-tight leading-none text-[17px]">SafePrint</p>
-              <p className="text-[11px] text-ink-400 font-medium">Impressão autoatendimento</p>
+              <p className="font-extrabold tracking-tight leading-none text-[17px]">{site.siteName}</p>
+              <p className="text-[11px] text-ink-400 font-medium">{site.tagline}</p>
             </div>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-[13px] font-bold text-ink-500">
@@ -87,13 +88,12 @@ export default function Landing() {
         <div className="absolute -bottom-32 -left-24 size-96 rounded-full bg-emerald-400/20 blur-3xl" />
         <div className="relative mx-auto max-w-5xl px-5 py-14 md:py-20 grid md:grid-cols-2 gap-10 items-center text-white">
           <div>
-            <p className="chip bg-white/10 text-brand-100 border border-white/15 mb-4">🎓 Novo no Unifacef • Franca/SP</p>
+            <p className="chip bg-white/10 text-brand-100 border border-white/15 mb-4">{site.heroBadge}</p>
             <h1 className="font-display font-extrabold tracking-tight text-[34px] md:text-[44px] leading-[1.05]">
-              Imprima seu trabalho <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-300 to-emerald-300">sem fila</span>, sem papelaria.
+              {site.heroTitle}
             </h1>
             <p className="text-white/70 font-medium mt-4 text-[15px] leading-relaxed">
-              Chegou na faculdade, lembrou do trabalho? Escaneie o QR da máquina,
-              envie o PDF pelo celular, pague no Pix e retire na hora. Pronto em menos de 1 minuto.
+              {site.heroSub}
             </p>
             <div className="flex flex-wrap gap-3 mt-6">
               <a href="/imprimir" className="bg-white text-ink-900 font-extrabold rounded-2xl px-7 py-3.5 text-[15px] shadow-card hover:bg-brand-50">Começar a imprimir →</a>
@@ -251,8 +251,8 @@ export default function Landing() {
 
       <footer className="border-t border-ink-100">
         <div className="mx-auto max-w-5xl px-5 py-8 flex flex-col md:flex-row gap-3 items-center justify-between text-xs text-ink-400 font-medium">
-          <p><b className="text-ink-700">SafePrint</b> • Impressão autoatendimento • Franca/SP</p>
-          <p>*Horário conforme o local da máquina • Arquivos excluídos em 24h • <a href="/privacidade" className="underline">Privacidade</a></p>
+          <p><b className="text-ink-700">{site.siteName}</b> • {site.tagline} • Franca/SP</p>
+          <p>{site.footerNote} • <a href="/privacidade" className="underline">Privacidade</a></p>
         </div>
       </footer>
     </main>

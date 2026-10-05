@@ -9,7 +9,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const { tiers, promo, coupons } = await req.json().catch(() => ({}));
+  const { tiers, promo, coupons, site } = await req.json().catch(() => ({}));
 
   let cleanTiers: { minSheets: number; pricePerSheetCents: number }[] | undefined;
   if (Array.isArray(tiers)) {
@@ -39,6 +39,16 @@ export async function POST(req: Request) {
         }
       : cur.promo,
     coupons: cleanCoupons ?? cur.coupons ?? [],
+    site: site && typeof site === "object"
+      ? {
+          siteName: String(site.siteName ?? cur.site.siteName).slice(0, 40) || cur.site.siteName,
+          tagline: String(site.tagline ?? cur.site.tagline).slice(0, 80),
+          heroBadge: String(site.heroBadge ?? cur.site.heroBadge).slice(0, 80),
+          heroTitle: String(site.heroTitle ?? cur.site.heroTitle).slice(0, 120),
+          heroSub: String(site.heroSub ?? cur.site.heroSub).slice(0, 300),
+          footerNote: String(site.footerNote ?? cur.site.footerNote).slice(0, 160),
+        }
+      : cur.site,
   });
   return NextResponse.json({ ok: true, config: next });
 }

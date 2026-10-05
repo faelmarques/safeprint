@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PRINTERS } from "@/lib/printers";
+import { listPrinters } from "@/lib/printers";
 import { store, isAdmin, effectiveTiers } from "@/lib/store";
 
 const PAID = ["queued", "printing", "done"];
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
     };
   });
 
-  const printers = PRINTERS.map((p) => {
+  const printers = listPrinters().map((p) => {
     const pj = paid.filter((j) => j.printerId === p.id);
     return {
       ...p,
@@ -60,7 +60,7 @@ export async function GET(req: Request) {
   // nome da impressora em cada reembolso (pro painel)
   const refundsWithPrinter = refunds.map((r) => ({
     ...r,
-    printerName: PRINTERS.find((p) => p.id === jobs.find((j) => j.id === r.jobId)?.printerId)?.name ?? "—",
+    printerName: listPrinters().find((p) => p.id === jobs.find((j) => j.id === r.jobId)?.printerId)?.name ?? "—",
   }));
 
   return NextResponse.json({

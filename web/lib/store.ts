@@ -2,6 +2,8 @@
 // Trocar por Postgres/Prisma em produção sem mudar a API das rotas.
 import fs from "fs";
 import path from "path";
+import type { Printer } from "./printers";
+import { PRINTERS } from "./printers";
 
 export type JobStatus = "awaiting_payment" | "queued" | "printing" | "done" | "failed" | "expired";
 export interface PrintJob {
@@ -80,6 +82,7 @@ export interface PricingConfig {
   tiers: import("./printers").PriceTier[];
   promo: { enabled: boolean; title: string; description: string };
   coupons: Coupon[];
+  site: SiteConfig;
 }
 
 export function isAdmin(req: Request): boolean {
@@ -95,6 +98,25 @@ const REFUNDS_FILE = path.join(DATA_DIR, "refunds.json");
 const PAPER_FILE = path.join(DATA_DIR, "paper.json");
 const META_FILE = path.join(DATA_DIR, "printers-meta.json");
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
+const PRINTERS_FILE = path.join(DATA_DIR, "printers.json");
+
+export interface SiteConfig {
+  siteName: string;
+  tagline: string;
+  heroBadge: string;
+  heroTitle: string;
+  heroSub: string;
+  footerNote: string;
+}
+
+const DEFAULT_SITE: SiteConfig = {
+  siteName: "SafePrint",
+  tagline: "Impressão autoatendimento",
+  heroBadge: "🎓 Novo no Unifacef • Franca/SP",
+  heroTitle: "Imprima seu trabalho sem fila, sem papelaria.",
+  heroSub: "Chegou na faculdade, lembrou do trabalho? Escaneie o QR da máquina, envie o PDF pelo celular, pague no Pix e retire na hora. Pronto em menos de 1 minuto.",
+  footerNote: "*Horário conforme o local da máquina • Arquivos excluídos em 24h",
+};
 
 function ensure() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -110,7 +132,9 @@ function ensure() {
     ],
     promo: { enabled: false, title: "", description: "" },
     coupons: [],
+    site: DEFAULT_SITE,
   }, null, 2));
+  if (!fs.existsSync(PRINTERS_FILE)) fs.writeFileSync(PRINTERS_FILE, JSON.stringify(PRINTERS, null, 2));
 }
 
 function read<T>(f: string, fallback: T): T {
@@ -186,17 +210,50 @@ export const store = {
   },
   config: {
     get(): PricingConfig {
+      const fallback: PricingConfig = {
+        tiers: [
+          { minSheets: 1, pricePerSheetCents: 150 },
+          { minSheets: 6, pricePerSheetCents: 135 },
+          { minSheets: 11, pricePerSheetCents: 125 },
+        ],
+        promo: { enabled: false, title: "", description: "" },
+        coupons: [],
+        site: DEFAULT_SITE,
+      };
       try {
         const c = read<PricingConfig>(CONFIG_FILE, null as any);
-        if (c && Array.isArray(c.tiers) && c.tiers.length) return c;
+        if (c && Array.isArray(c.tiers) && c.tiers.length) {
+          return { ...fallback, ...c, site: { ...DEFAULT_SITE, ...(c.site ?? {}) } };
+        }
       } catch {}
-      return { tiers: [
-        { minSheets: 1, pricePerSheetCents: 150 },
-        { minSheets: 6, pricePerSheetCents: 135 },
-        { minSheets: 11, pricePerSheetCents: 125 },
-      ], promo: { enabled: false, title: "", description: "" }, coupons: [] };
+      return fallback;
     },
     set(c: PricingConfig) { write(CONFIG_FILE, c); return c; },
+  },
+  printers: {
+    all(): Printer[] {
+      const list = read<Printer[]>(PRINTERS_FILE, null as any);
+      if (Array.isArray(list) && list.length) return list;
+      write(PRINTERS_FILE, PRINTERS);
+      return [...PRINTERS];
+    },
+    get(idOrSlug: string): Printer | undefined {
+      return store.printers.all().find((p) => p.id === idOrSlug || p.slug === idOrSlug);
+    },
+    save(p: Printer) {
+      const all = store.printers.all();
+      const i = all.findIndex((x) => x.id === p.id);
+      if (i >= 0) all[i] = p; else all.push(p);
+      write(PRINTERS_FILE, all);
+      return p;
+    },
+    remove(id: string): boolean {
+      const all = store.printers.all();
+      const next = all.filter((x) => x.id !== id);
+      if (next.length === all.length) return false;
+      write(PRINTERS_FILE, next);
+      return true;
+    },
   },
   paper: {
     get(printerId: string, fallback = 200): number {
