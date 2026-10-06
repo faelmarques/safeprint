@@ -66,6 +66,9 @@ export async function POST(req: Request) {
   if (typeof couponCode === "string" && couponCode.trim()) {
     const c = store.config.get().coupons?.find((x) => x.active && x.code.trim().toUpperCase() === couponCode.trim().toUpperCase());
     if (!c) return NextResponse.json({ error: "Cupom inválido ou expirado" }, { status: 400 });
+    if (c.singleUse && store.couponsUsed.has(c.code)) {
+      return NextResponse.json({ error: "Cupom de uso único já utilizado" }, { status: 400 });
+    }
     discountCents = Math.floor((totalCents * Math.min(100, Math.max(0, c.percentOff))) / 100);
     appliedCoupon = c.code.toUpperCase();
     totalCents = Math.max(0, totalCents - discountCents);
@@ -100,6 +103,10 @@ export async function POST(req: Request) {
     fileDataUrl,
   };
   store.jobs.save(job);
+  if (appliedCoupon) {
+    const c = store.config.get().coupons?.find((x) => x.code.toUpperCase() === appliedCoupon);
+    if (c?.singleUse) store.couponsUsed.burn(appliedCoupon);
+  }
   return NextResponse.json({ job });
 }
 

@@ -23,10 +23,10 @@ export async function POST(req: Request) {
   }
 
   const cur = store.config.get();
-  let cleanCoupons: { code: string; percentOff: number; active: boolean }[] | undefined;
+  let cleanCoupons: { code: string; percentOff: number; active: boolean; singleUse?: boolean }[] | undefined;
   if (Array.isArray(coupons)) {
     cleanCoupons = coupons
-      .map((c: any) => ({ code: String(c.code ?? "").trim().toUpperCase().slice(0, 20), percentOff: Math.min(100, Math.max(1, Math.round(Number(c.percentOff)))), active: c.active !== false }))
+      .map((c: any) => ({ code: String(c.code ?? "").trim().toUpperCase().slice(0, 20), percentOff: Math.min(100, Math.max(1, Math.round(Number(c.percentOff)))), active: c.active !== false, singleUse: c.singleUse === true || undefined }))
       .filter((c: any) => c.code.length >= 2 && Number.isFinite(c.percentOff));
   }
   const next = store.config.set({

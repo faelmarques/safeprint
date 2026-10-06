@@ -305,6 +305,16 @@ export default function Home() {
       setJobIds(ids);
       setCancelled(false);
       setPixQr(""); setPixCopy(""); setPixId("");
+      if (couponApplied) {
+        try {
+          const used: string[] = JSON.parse(localStorage.getItem("sp-coupons-used") ?? "[]");
+          const code = couponApplied.code.toUpperCase();
+          if (!used.includes(code)) {
+            used.push(code);
+            localStorage.setItem("sp-coupons-used", JSON.stringify(used));
+          }
+        } catch {}
+      }
       setStep(4);
     } catch (e: any) { setErr(e.message); }
     finally { setLoading(false); }
@@ -724,7 +734,12 @@ export default function Home() {
                   <button onClick={() => { setCouponApplied(null); setCouponInput(""); }} className="text-xs font-extrabold text-red-400 whitespace-nowrap">remover</button>
                 ) : (
                   <button onClick={() => {
-                    const c = coupons.find((x) => x.code.toUpperCase() === couponInput.trim().toUpperCase());
+                    const code = couponInput.trim().toUpperCase();
+                    try {
+                      const used: string[] = JSON.parse(localStorage.getItem("sp-coupons-used") ?? "[]");
+                      if (used.includes(code)) { setErr("Cupom já usado neste navegador (vale 1x por aparelho)."); return; }
+                    } catch {}
+                    const c = coupons.find((x) => x.code.toUpperCase() === code);
                     if (c) setCouponApplied(c); else setErr("Cupom inválido");
                   }} className="bg-ink-900 text-white text-sm font-bold px-5 rounded-2xl">Aplicar</button>
                 )}

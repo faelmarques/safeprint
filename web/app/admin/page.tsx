@@ -66,7 +66,7 @@ export default function Admin() {
   const [promoTitle, setPromoTitle] = useState("");
   const [promoDesc, setPromoDesc] = useState("");
   const [priceMsg, setPriceMsg] = useState("");
-  const [coupons, setCoupons] = useState<{ code: string; percentOff: string; active: boolean }[]>([]);
+  const [coupons, setCoupons] = useState<{ code: string; percentOff: string; active: boolean; singleUse?: boolean }[]>([]);
   const [newCoupon, setNewCoupon] = useState("");
   const [newCouponPct, setNewCouponPct] = useState("");
   const [fin, setFin] = useState<any>(null);
@@ -101,7 +101,7 @@ export default function Admin() {
         setPromoOn(Boolean(d.config.promo?.enabled));
         setPromoTitle(d.config.promo?.title ?? "");
         setPromoDesc(d.config.promo?.description ?? "");
-        setCoupons((d.config.coupons ?? []).map((c: any) => ({ code: c.code, percentOff: String(c.percentOff), active: c.active !== false })));
+        setCoupons((d.config.coupons ?? []).map((c: any) => ({ code: c.code, percentOff: String(c.percentOff), active: c.active !== false, singleUse: c.singleUse === true })));
         const s = d.config.site ?? {};
         setSName(s.siteName ?? ""); setSTag(s.tagline ?? ""); setSBadge(s.heroBadge ?? "");
         setSTitle(s.heroTitle ?? ""); setSSub(s.heroSub ?? ""); setSFoot(s.footerNote ?? "");
@@ -203,7 +203,7 @@ export default function Admin() {
     const r = await fetch("/api/admin/pricing", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-admin-key": key },
-      body: JSON.stringify({ tiers: parsed, promo: { enabled: promoOn, title: promoTitle, description: promoDesc }, coupons: coupons.map((c) => ({ code: c.code, percentOff: Number(c.percentOff), active: c.active })) }),
+      body: JSON.stringify({ tiers: parsed, promo: { enabled: promoOn, title: promoTitle, description: promoDesc }, coupons: coupons.map((c) => ({ code: c.code, percentOff: Number(c.percentOff), active: c.active, singleUse: !!c.singleUse })) }),
     });
     const d = await r.json();
     if (!r.ok) { setPriceMsg("⚠️ " + (d.error ?? "Erro ao salvar")); return; }
@@ -599,9 +599,12 @@ export default function Admin() {
                   <input value={c.code} onChange={(e) => setCoupons(coupons.map((x, j) => j === i ? { ...x, code: e.target.value } : x))} className="input !py-2.5 flex-1 uppercase font-mono" placeholder="ALUNO10" />
                   <input value={c.percentOff} inputMode="numeric" onChange={(e) => setCoupons(coupons.map((x, j) => j === i ? { ...x, percentOff: e.target.value } : x))} className="input !py-2.5 w-24" placeholder="10" />
                   <span className="text-xs font-bold text-ink-400">% off</span>
-                  <label className="flex items-center gap-1 text-xs font-bold text-ink-500">
-                    <input type="checkbox" checked={c.active} onChange={(e) => setCoupons(coupons.map((x, j) => j === i ? { ...x, active: e.target.checked } : x))} className="size-4 accent-ink-900" /> ativo
-                  </label>
+                <label className="flex items-center gap-1 text-xs font-bold text-ink-500">
+                  <input type="checkbox" checked={c.active} onChange={(e) => setCoupons(coupons.map((x, j) => j === i ? { ...x, active: e.target.checked } : x))} className="size-4 accent-ink-900" /> ativo
+                </label>
+                <label className="flex items-center gap-1 text-xs font-bold text-ink-500" title="Vale 1x no total (queima após o primeiro pedido)">
+                  <input type="checkbox" checked={!!c.singleUse} onChange={(e) => setCoupons(coupons.map((x, j) => j === i ? { ...x, singleUse: e.target.checked } : x))} className="size-4 accent-ink-900" /> 1x
+                </label>
                   <button onClick={() => setCoupons(coupons.filter((_, j) => j !== i))} className="text-xs font-bold text-red-400 px-2">✕</button>
                 </div>
               ))}

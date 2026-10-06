@@ -76,6 +76,7 @@ export interface Coupon {
   code: string;
   percentOff: number; // 0-100
   active: boolean;
+  singleUse?: boolean; // uso único global: queimado após o primeiro pedido
 }
 
 export interface PricingConfig {
@@ -99,6 +100,7 @@ const PAPER_FILE = path.join(DATA_DIR, "paper.json");
 const META_FILE = path.join(DATA_DIR, "printers-meta.json");
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const PRINTERS_FILE = path.join(DATA_DIR, "printers.json");
+const COUPONS_USED_FILE = path.join(DATA_DIR, "coupons-used.json");
 
 export interface SiteConfig {
   siteName: string;
@@ -135,6 +137,7 @@ function ensure() {
     site: DEFAULT_SITE,
   }, null, 2));
   if (!fs.existsSync(PRINTERS_FILE)) fs.writeFileSync(PRINTERS_FILE, JSON.stringify(PRINTERS, null, 2));
+  if (!fs.existsSync(COUPONS_USED_FILE)) fs.writeFileSync(COUPONS_USED_FILE, "[]");
 }
 
 function read<T>(f: string, fallback: T): T {
@@ -253,6 +256,18 @@ export const store = {
       if (next.length === all.length) return false;
       write(PRINTERS_FILE, next);
       return true;
+    },
+  },
+  couponsUsed: {
+    // códigos de uso único já queimados (uppercase)
+    all(): string[] { return read<string[]>(COUPONS_USED_FILE, []); },
+    has(code: string): boolean {
+      return read<string[]>(COUPONS_USED_FILE, []).includes(code.trim().toUpperCase());
+    },
+    burn(code: string) {
+      const all = read<string[]>(COUPONS_USED_FILE, []);
+      const c = code.trim().toUpperCase();
+      if (!all.includes(c)) { all.push(c); write(COUPONS_USED_FILE, all); }
     },
   },
   paper: {
