@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { store, notifyLowPaper, autoPauseIfEmpty, listPrinters } from "@/lib/store";
+import { decDataUrl } from "@/lib/crypto";
 
 function merged(printerId: string) {
   const base = listPrinters().find((p) => p.id === printerId || p.slug === printerId);
@@ -44,7 +45,9 @@ export async function GET(req: Request) {
     j.claimToken = uuid();
     store.jobs.save(j);
   }
-  return NextResponse.json({ printer, jobs: pending });
+  // descriptografa só na entrega ao Pi (repouso fica cifrado)
+  const jobs = pending.map((j) => ({ ...j, fileDataUrl: decDataUrl(j.fileDataUrl) }));
+  return NextResponse.json({ printer, jobs });
 }
 
 // Pi confirma: POST { jobId, ok: true } — idempotente (re-confirm não consome 2x)

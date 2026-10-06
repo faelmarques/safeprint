@@ -4,6 +4,7 @@ import { calcSheets, calcTotal } from "@/lib/pricing";
 import { store, effectiveTiers, sweepExpired, findPrinter, type PrintJob } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 import { checkDataUrl } from "@/lib/filefilter";
+import { encDataUrl } from "@/lib/crypto";
 
 // Conta páginas do PDF via /Count (mesma heurística do front). 0 = indeterminado.
 function countPdfPages(dataUrl: string): number {
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
     status: "awaiting_payment",
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-    fileDataUrl,
+    fileDataUrl: encDataUrl(fileDataUrl),
   };
   store.jobs.save(job);
   if (appliedCoupon) {

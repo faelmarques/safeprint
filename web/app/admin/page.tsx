@@ -18,7 +18,7 @@ const STATUS_LABEL: Record<string, [string, string]> = {
   expired: ["expirado", "bg-ink-50 text-ink-400 border-ink-200"],
 };
 
-type Tab = "dash" | "pedidos" | "locais" | "precos" | "financeiro" | "reembolsos" | "site";
+type Tab = "dash" | "pedidos" | "locais" | "precos" | "financeiro" | "reembolsos" | "site" | "seg";
 
 const TABS: [Tab, string, string][] = [
   ["dash", "📊", "Visão geral"],
@@ -28,6 +28,7 @@ const TABS: [Tab, string, string][] = [
   ["financeiro", "💰", "Financeiro"],
   ["reembolsos", "💸", "Reembolsos"],
   ["site", "🎨", "Site"],
+  ["seg", "🔐", "Segurança"],
 ];
 
 export default function Admin() {
@@ -35,6 +36,8 @@ export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [loginPw, setLoginPw] = useState("");
   const [loginErr, setLoginErr] = useState("");
+  const [loginTotp, setLoginTotp] = useState("");
+  const [loginMfa, setLoginMfa] = useState(false);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("dash");
@@ -71,6 +74,15 @@ export default function Admin() {
   const [newCouponPct, setNewCouponPct] = useState("");
   const [fin, setFin] = useState<any>(null);
   const [finMsg, setFinMsg] = useState("");
+
+  // segurança
+  const [sec, setSec] = useState<any>(null);
+  const [secMsg, setSecMsg] = useState("");
+  const [pwCur, setPwCur] = useState("");
+  const [pwNext, setPwNext] = useState("");
+  const [mfaSecret, setMfaSecret] = useState("");
+  const [mfaUrl, setMfaUrl] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
 
   // site (textos)
   const [sName, setSName] = useState("");
@@ -117,13 +129,19 @@ export default function Admin() {
   }, [selectedId]);
 
   useEffect(() => { if (authed && key) load(key); }, [authed, key, load]);
+  useEffect(() => { if (authed && key && tab === "seg") loadSec(); }, [tab, authed, key]);
 
   async function login() {
     setLoginErr("");
-    const r = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: loginPw }) });
-    if (!r.ok) { setLoginErr("Senha incorreta"); return; }
-    sessionStorage.setItem("sp-admin", loginPw);
-    setKey(loginPw); setLoginPw(""); setAuthed(true);
+    const r = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: loginPw, totp: loginTotp || undefined }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (d.mfaRequired) setLoginMfa(true);
+      setLoginErr(d.error ?? "Senha incorreta");
+      return;
+    }
+    sessionStorage.setItem("sp-admin", d.token);
+    setKey(d.token); setLoginPw(""); setLoginTotp(""); setLoginMfa(false); setAuthed(true);
   }
 
   function select(p: any) {
@@ -255,6 +273,28 @@ export default function Admin() {
     loadFin();
   }
 
+  async function loadSec() {
+    setSecMsg("");
+    const r = await fetch("/api/admin/security", { headers: { "x-admin-key": key } });
+    const d = await r.json();
+    if (!r.ok) { setSecMsg("⚠️ " + (d.error ?? "Erro")); return; }
+    setSec(d);
+  }
+
+  async function secPost(body: any, okMsg: string) {
+    setSecMsg("");
+    const r = await fetch("/api/admin/security", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-key": key },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!r.ok) { setSecMsg("⚠️ " + (d.error ?? "Erro")); return null; }
+    setSecMsg("✅ " + okMsg);
+    loadSec();
+    return d;
+  }
+
   const orders = useMemo(() => {
     const out: any[] = [];
     for (const p of data?.printers ?? []) {
@@ -274,6 +314,11 @@ export default function Admin() {
           <input type="password" value={loginPw} onChange={(e) => setLoginPw(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && login()}
             placeholder="Senha" className="input mt-5 text-center" autoFocus />
+          {loginMfa && (
+            <input value={loginTotp} onChange={(e) => setLoginTotp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onKeyDown={(e) => e.key === "Enter" && login()}
+              placeholder="Código do app (MFA)" inputMode="numeric" className="input mt-3 text-center font-mono tracking-[0.3em]" autoFocus />
+          )}
           {loginErr && <p className="text-sm font-bold text-red-500 mt-2">{loginErr}</p>}
           <button onClick={login} className="btn-primary mt-3">Entrar</button>
         </div>
@@ -733,6 +778,69 @@ export default function Admin() {
               <input value={sFoot} onChange={(e) => setSFoot(e.target.value)} className="input mt-1" /></label>
             <button onClick={saveSite} className="bg-ink-900 text-white text-sm font-bold px-5 py-2.5 rounded-2xl hover:bg-ink-800">Salvar site</button>
             {siteMsg && <p className="text-sm font-bold">{siteMsg}</p>}
+          </div>
+        )}
+
+        {/* ============ SEGURANÇA ============ */}
+        {tab === "seg" && (
+          <div className="space-y-4">
+            <div className="card p-5 md:p-6 space-y-4">
+              <div>
+                <p className="font-extrabold text-lg tracking-tight">🔐 Segurança e acesso</p>
+                <p className="text-xs text-ink-400 font-medium mt-0.5">Senha com hash, segundo fator (MFA) e sessões com expiração de 12h.</p>
+              </div>
+              {secMsg && <p className="text-sm font-bold">{secMsg}</p>}
+              {!sec ? (
+                <button onClick={loadSec} className="text-xs font-bold border border-ink-200 bg-white rounded-xl px-3 py-2">Carregar</button>
+              ) : (
+                <>
+                  <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4 space-y-3">
+                    <p className="font-extrabold text-sm">Trocar senha {sec.hasCustomPassword ? "(hash bcrypt ativo)" : "(usando .env)"}</p>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <label className="text-xs font-bold text-ink-500">Senha atual
+                        <input type="password" value={pwCur} onChange={(e) => setPwCur(e.target.value)} className="input mt-1" /></label>
+                      <label className="text-xs font-bold text-ink-500">Nova senha (8+ caracteres)
+                        <input type="password" value={pwNext} onChange={(e) => setPwNext(e.target.value)} className="input mt-1" /></label>
+                    </div>
+                    <button onClick={async () => { const d = await secPost({ action: "change-password", current: pwCur, next: pwNext }, "Senha trocada!"); if (d) { setPwCur(""); setPwNext(""); } }} className="bg-ink-900 text-white text-sm font-bold px-5 py-2.5 rounded-2xl">Trocar senha</button>
+                  </div>
+
+                  <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4 space-y-3">
+                    <p className="font-extrabold text-sm">Segundo fator (MFA) — {sec.mfaEnabled ? "✅ ativado" : "⚪ desativado"}</p>
+                    {!sec.mfaEnabled ? (
+                      <>
+                        <button onClick={async () => { const d = await secPost({ action: "mfa-setup" }, "Escaneie o código no app autenticador e confirme abaixo."); if (d) { setMfaSecret(d.secret); setMfaUrl(d.url); } }} className="text-xs font-bold border border-ink-200 bg-white rounded-xl px-3 py-2">Gerar segredo MFA</button>
+                        {mfaSecret && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-bold text-ink-500">Chave (ou abra a URL no autenticador):</p>
+                            <code className="block font-mono text-sm bg-white border border-ink-200 rounded-xl p-3 break-all">{mfaSecret}</code>
+                            <a href={mfaUrl} className="text-xs font-bold text-brand-600 underline break-all">Abrir no app autenticador</a>
+                            <div className="flex gap-2">
+                              <input value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="000000" className="input font-mono text-center tracking-[0.3em]" />
+                              <button onClick={async () => { const d = await secPost({ action: "mfa-enable", totp: mfaCode }, "MFA ativado!"); if (d) { setMfaSecret(""); setMfaCode(""); } }} className="bg-emerald-500 text-white text-sm font-bold px-5 rounded-2xl whitespace-nowrap">Ativar</button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <button onClick={async () => { const pw = prompt("Digite a senha atual para desativar o MFA:"); if (pw) await secPost({ action: "mfa-disable", password: pw }, "MFA desativado."); }} className="text-xs font-bold border border-red-300 text-red-500 rounded-xl px-3 py-2">Desativar MFA</button>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <p className="font-extrabold text-sm">Sessões ativas ({(sec.sessions ?? []).length})</p>
+                      <button onClick={() => secPost({ action: "revoke-others" }, "Outras sessões derrubadas.")} className="text-xs font-bold border border-ink-200 bg-white rounded-xl px-3 py-2">Derrubar outras</button>
+                    </div>
+                    {(sec.sessions ?? []).map((s: any) => (
+                      <div key={s.token} className="flex items-center justify-between text-xs bg-white border border-ink-100 rounded-xl px-3 py-2">
+                        <span className="font-medium">desde {dt(s.createdAt)} • expira {dt(s.expiresAt)} {s.current && <b>(esta)</b>}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

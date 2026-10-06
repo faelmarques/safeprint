@@ -88,9 +88,7 @@ export interface PricingConfig {
 
 export function isAdmin(req: Request): boolean {
   const key = req.headers.get("x-admin-key") ?? "";
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return key !== "" && key === "admin" && process.env.NODE_ENV !== "production";
-  return key !== "" && key === expected;
+  return store.sessions.valid(key) !== null;
 }
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -101,6 +99,23 @@ const META_FILE = path.join(DATA_DIR, "printers-meta.json");
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const PRINTERS_FILE = path.join(DATA_DIR, "printers.json");
 const COUPONS_USED_FILE = path.join(DATA_DIR, "coupons-used.json");
+const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
+const SECURITY_FILE = path.join(DATA_DIR, "security.json");
+const VERSION_FILE = path.join(DATA_DIR, "version.json");
+const DATA_VERSION = 3;
+
+export interface AdminSession {
+  token: string;
+  role: "admin";
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface SecurityState {
+  passwordHash?: string; // bcrypt; vazio = usa ADMIN_PASSWORD do ambiente
+  mfaSecret?: string; // base64; vazio = MFA desligado
+  mfaEnabled: boolean;
+}
 
 export interface SiteConfig {
   siteName: string;
@@ -138,6 +153,44 @@ function ensure() {
   }, null, 2));
   if (!fs.existsSync(PRINTERS_FILE)) fs.writeFileSync(PRINTERS_FILE, JSON.stringify(PRINTERS, null, 2));
   if (!fs.existsSync(COUPONS_USED_FILE)) fs.writeFileSync(COUPONS_USED_FILE, "[]");
+  if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, "[]");
+  if (!fs.existsSync(SECURITY_FILE)) fs.writeFileSync(SECURITY_FILE, JSON.stringify({ mfaEnabled: false }, null, 2));
+  try { fs.chmodSync(DATA_DIR, 0o700); } catch {}
+  migrate();
+}
+
+// Migrations versionadas do banco JSON (v1: site+impressoras, v2: sessoes/mfa, v3: cupons usados).
+// Roda no boot; rollback = restaurar backup de data/ (ver docs/RECUPERACAO.md).
+function migrate() {
+  let v = 0;
+  try {
+    v = Number(JSON.parse(fs.readFileSync(VERSION_FILE, "utf-8")).version ?? 0) || 0;
+  } catch {}
+  if (v >= DATA_VERSION) return;
+  // v1: garante site em config legada + printers.json a partir do seed
+  if (v < 1) {
+    try {
+      const c = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+      if (!c.site) {
+        c.site = {
+          siteName: "SafePrint",
+          tagline: "Impressão autoatendimento",
+          heroBadge: "🎓 Novo no Unifacef • Franca/SP",
+          heroTitle: "Imprima seu trabalho sem fila, sem papelaria.",
+          heroSub: "Escaneie o QR da máquina, envie o PDF pelo celular, pague no Pix e retire na hora.",
+          footerNote: "*Horário conforme o local da máquina • Arquivos excluídos em 24h",
+        };
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2));
+      }
+    } catch {}
+    if (!fs.existsSync(PRINTERS_FILE)) {
+      try { fs.writeFileSync(PRINTERS_FILE, JSON.stringify(PRINTERS, null, 2)); } catch {}
+    }
+  }
+  // v2/v3: arquivos com ensure() acima; só carimba versão
+  try {
+    fs.writeFileSync(VERSION_FILE, JSON.stringify({ version: DATA_VERSION, at: new Date().toISOString() }, null, 2));
+  } catch {}
 }
 
 function read<T>(f: string, fallback: T): T {
@@ -285,6 +338,50 @@ export const store = {
       const next = Math.max(0, cur - sheets);
       store.paper.set(printerId, next);
       return next;
+    },
+  },
+  security: {
+    get(): SecurityState {
+      return read<SecurityState>(SECURITY_FILE, { mfaEnabled: false });
+    },
+    set(patch: Partial<SecurityState>): SecurityState {
+      const cur = store.security.get();
+      const next = { ...cur, ...patch };
+      write(SECURITY_FILE, next);
+      return next;
+    },
+  },
+  sessions: {
+    ttlMs: 12 * 60 * 60 * 1000,
+    all(): AdminSession[] { return read<AdminSession[]>(SESSIONS_FILE, []); },
+    sweep(): AdminSession[] {
+      const alive = read<AdminSession[]>(SESSIONS_FILE, []).filter((s) => Date.parse(s.expiresAt) > Date.now());
+      write(SESSIONS_FILE, alive);
+      return alive;
+    },
+    create(): AdminSession {
+      const now = Date.now();
+      const s: AdminSession = {
+        token: require("crypto").randomBytes(32).toString("hex"),
+        role: "admin",
+        createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + store.sessions.ttlMs).toISOString(),
+      };
+      const all = store.sessions.sweep();
+      all.push(s);
+      write(SESSIONS_FILE, all);
+      return s;
+    },
+    valid(token: string): AdminSession | null {
+      if (!token) return null;
+      const s = store.sessions.sweep().find((x) => x.token === token) ?? null;
+      return s;
+    },
+    revoke(token: string) {
+      write(SESSIONS_FILE, store.sessions.sweep().filter((x) => x.token !== token));
+    },
+    revokeAll() {
+      write(SESSIONS_FILE, []);
     },
   },
 };

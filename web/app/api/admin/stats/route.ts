@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { store, isAdmin, effectiveTiers, listPrinters } from "@/lib/store";
+import { decDataUrl } from "@/lib/crypto";
 
 const PAID = ["queued", "printing", "done"];
 
@@ -56,9 +57,10 @@ export async function GET(req: Request) {
     };
   });
 
-  // nome da impressora em cada reembolso (pro painel)
+  // nome da impressora em cada reembolso (pro painel); foto descriptografada (só admin vê)
   const refundsWithPrinter = refunds.map((r) => ({
     ...r,
+    photoDataUrl: decDataUrl(r.photoDataUrl) ?? "",
     printerName: listPrinters().find((p) => p.id === jobs.find((j) => j.id === r.jobId)?.printerId)?.name ?? "—",
   }));
 

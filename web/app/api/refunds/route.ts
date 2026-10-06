@@ -3,6 +3,7 @@ import { v4 as uuid } from "uuid";
 import { store, isAdmin, REFUND_MOTIVES, type RefundMotive, type RefundRequest } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 import { checkDataUrl } from "@/lib/filefilter";
+import { encDataUrl } from "@/lib/crypto";
 
 export async function POST(req: Request) {
   const rl = rateLimit(req, "refunds-post", 10, 60 * 60 * 1000);
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     description: String(description).trim().slice(0, 1000),
     name: String(name).trim().slice(0, 120),
     whatsapp: phone.slice(0, 13),
-    photoDataUrl: String(photoDataUrl).slice(0, 2_000_000),
+    photoDataUrl: encDataUrl(String(photoDataUrl).slice(0, 2_000_000)) ?? "",
     status: "open",
     createdAt: new Date().toISOString(),
   };
