@@ -25,9 +25,9 @@ interface FileEntry {
 export default function Home() {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [promo, setPromo] = useState<{ enabled: boolean; title: string; description: string } | null>(null);
-  const [coupons, setCoupons] = useState<{ code: string; percentOff: number }[]>([]);
+  const [coupons, setCoupons] = useState<{ code: string; percentOff: number; singleUse?: boolean }[]>([]);
   const [couponInput, setCouponInput] = useState("");
-  const [couponApplied, setCouponApplied] = useState<{ code: string; percentOff: number } | null>(null);
+  const [couponApplied, setCouponApplied] = useState<{ code: string; percentOff: number; singleUse?: boolean } | null>(null);
   const [dark, setDark] = useState(false);
   const [slug, setSlug] = useState("");
   const [step, setStep] = useState<Step>(1);
@@ -305,7 +305,7 @@ export default function Home() {
       setJobIds(ids);
       setCancelled(false);
       setPixQr(""); setPixCopy(""); setPixId("");
-      if (couponApplied) {
+      if (couponApplied?.singleUse) {
         try {
           const used: string[] = JSON.parse(localStorage.getItem("sp-coupons-used") ?? "[]");
           const code = couponApplied.code.toUpperCase();
@@ -748,12 +748,15 @@ export default function Home() {
                 ) : (
                   <button onClick={() => {
                     const code = couponInput.trim().toUpperCase();
-                    try {
-                      const used: string[] = JSON.parse(localStorage.getItem("sp-coupons-used") ?? "[]");
-                      if (used.includes(code)) { setErr("Cupom já usado neste navegador (vale 1x por aparelho)."); return; }
-                    } catch {}
                     const c = coupons.find((x) => x.code.toUpperCase() === code);
-                    if (c) setCouponApplied(c); else setErr("Cupom inválido");
+                    if (!c) { setErr("Cupom inválido"); return; }
+                    if (c.singleUse) {
+                      try {
+                        const used: string[] = JSON.parse(localStorage.getItem("sp-coupons-used") ?? "[]");
+                        if (used.includes(code)) { setErr("Cupom de uso único já usado neste aparelho."); return; }
+                      } catch {}
+                    }
+                    setCouponApplied(c);
                   }} className="bg-ink-900 text-white text-sm font-bold px-5 rounded-2xl">Aplicar</button>
                 )}
               </div>

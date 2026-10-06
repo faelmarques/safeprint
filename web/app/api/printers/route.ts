@@ -8,5 +8,5 @@ export async function GET() {
     ...p,
     tiers: effectiveTiers(p.id, p.tiers),
   }));
-  return NextResponse.json({ printers, site: cfg.site, promo: cfg.promo, coupons: (cfg.coupons ?? []).filter((c) => c.active && !(c.singleUse && burned.has(c.code.toUpperCase()))).map((c) => ({ code: c.code, percentOff: c.percentOff })) });
+  return NextResponse.json({ printers, site: cfg.site, promo: cfg.promo, coupons: (cfg.coupons ?? []).filter((c) => c.active && !(c.singleUse && burned.has(c.code.toUpperCase()))).map((c) => ({ code: c.code, percentOff: c.percentOff, singleUse: !!c.singleUse })) });
 }
