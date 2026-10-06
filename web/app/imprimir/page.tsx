@@ -848,10 +848,12 @@ export default function Home() {
                   <button onClick={() => window.print()} className="text-xs font-bold text-brand-600 underline mt-1">🖨️ Salvar/imprimir comprovante</button>
                 </div>
 
-                <div className="rounded-2xl bg-brand-50 border border-brand-100 p-3 text-xs font-bold text-brand-700">
-                  🎁 Fidelidade: {loyalty % 10 === 0 && loyalty > 0 ? "você ganhou 10 folhas grátis no próximo ciclo!" : `sua ${loyalty % 10 === 0 ? 10 : loyalty % 10}ª impressão — faltam ${10 - (loyalty % 10 === 0 ? 10 : loyalty % 10)} para ganhar 10 folhas grátis`}
-                </div>
-
+                {confirmedOk && (
+                  <div className="rounded-3xl bg-emerald-50 border border-emerald-200 p-5">
+                    <p className="font-extrabold text-emerald-700">Valeu! 🎓</p>
+                    <p className="text-sm text-emerald-600 font-medium mt-1">Impressão confirmada e pagamento recebido. Volte sempre!</p>
+                  </div>
+                )}
                 {!confirmedOk && !showRefund && (
                   <div className="grid grid-cols-2 gap-2.5">
                     <button onClick={() => setConfirmedOk(true)} className="rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold py-3.5 text-sm shadow-card transition active:scale-[.98]">
