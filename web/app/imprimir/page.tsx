@@ -329,6 +329,18 @@ export default function Home() {
     localStorage.setItem("sp-loyalty", String(n));
     setLoyalty(n);
     setStep(5);
+    try {
+      if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+    } catch {}
+  }
+
+  function notifyReady() {
+    try {
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("SafePrint: impressão pronta! 🎉", { body: "Retire na saída da caixa." });
+      }
+    } catch {}
   }
 
   async function startPix() {
@@ -367,25 +379,30 @@ export default function Home() {
     return () => { stop = true; clearInterval(t); };
   }, [pixId, step]);
 
-  // Status em tempo real do pedido na etapa final
+  // Status em tempo real do pedido na etapa final (segue até concluir/falhar, ~15min)
   useEffect(() => {
     if (step !== 5 || !jobIds.length) return;
     let stop = false;
     let tries = 0;
-    const check = async () => {
+    const check = async (): Promise<boolean> => {
       try {
         const r = await fetch(`/api/jobs/${jobIds[0]}`);
         const d = await r.json();
-        if (stop || !r.ok) return;
-        setLiveStatus(d.job.status);
+        if (stop || !r.ok) return false;
+        const st = d.job.status;
+        setLiveStatus((prev) => {
+          if (prev !== "done" && st === "done") notifyReady();
+          return st;
+        });
         setQueueAhead(d.queueAhead ?? 0);
-      } catch {}
+        return st === "done" || st === "failed" || st === "expired";
+      } catch { return false; }
     };
-    check();
+    check().then((fin) => { if (fin) return; });
     const t = setInterval(async () => {
       tries++;
-      if (tries > 45) { clearInterval(t); return; }
-      await check();
+      if (tries > 220) { clearInterval(t); return; }
+      if (await check()) clearInterval(t);
     }, 4000);
     return () => { stop = true; clearInterval(t); };
   }, [step, jobIds]);
@@ -763,11 +780,27 @@ export default function Home() {
           <section className="card p-6 space-y-4 text-center border-emerald-200">
             {!cancelled && (
               <>
-                <div className="mx-auto size-14 rounded-full bg-emerald-500 text-white flex items-center justify-center text-2xl font-extrabold">✓</div>
-                <div>
-                  <h2 className="font-extrabold text-lg tracking-tight">Na fila! Retire na máquina</h2>
-                  <p className="hint">Pedido <code className="font-mono bg-ink-50 px-1.5 py-0.5 rounded">{jobIds[0]?.slice(0, 8)}</code> • {totalSheets} folha(s) • aguarde ~30s na saída da caixa</p>
-                </div>
+                {liveStatus === "done" ? (
+                  <div className="rounded-3xl bg-emerald-500 text-white p-6 shadow-pop animate-pulse">
+                    <p className="text-4xl">🎉</p>
+                    <h2 className="font-display font-extrabold tracking-tight text-2xl mt-2">Sua impressão ficou pronta!</h2>
+                    <p className="font-bold text-white/90 text-sm mt-1">Retire na saída da caixa 📤</p>
+                  </div>
+                ) : liveStatus === "failed" ? (
+                  <div className="rounded-3xl bg-red-50 border-2 border-red-200 p-6">
+                    <p className="text-4xl">⚠️</p>
+                    <h2 className="font-extrabold text-lg tracking-tight text-red-700 mt-2">Algo deu errado na impressão</h2>
+                    <p className="hint">O estorno do Pix é automático. Se não voltar em minutos, peça análise abaixo.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mx-auto size-14 rounded-full bg-brand-500 text-white flex items-center justify-center text-2xl font-extrabold">{queueAhead + 1}º</div>
+                    <div>
+                      <h2 className="font-extrabold text-lg tracking-tight">{queueAhead > 0 ? `Sua impressão é a ${queueAhead + 1}ª da fila` : "Sua impressão é a próxima!"}</h2>
+                      <p className="hint">Pedido <code className="font-mono bg-ink-50 px-1.5 py-0.5 rounded">{jobIds[0]?.slice(0, 8)}</code> • {totalSheets} folha(s) • {liveStatus === "printing" ? "imprimindo agora…" : "aguarde na saída da caixa"}</p>
+                    </div>
+                  </>
+                )}
 
                 <div className="rounded-2xl bg-ink-50 border border-ink-100 p-4 text-left text-sm space-y-1">
                   <p className="font-extrabold text-xs text-ink-400 tracking-widest">COMPROVANTE</p>
