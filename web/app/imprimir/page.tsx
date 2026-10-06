@@ -446,9 +446,14 @@ export default function Home() {
       {/* NAV */}
       <header className="sticky top-0 z-20 bg-[#fafafa]/90 dark:bg-[#0c0d0f]/90 backdrop-blur border-b border-zinc-200 dark:border-white/10">
         <div className="mx-auto max-w-3xl px-5 py-3.5 flex items-center justify-between">
-          <div>
-            <p className="font-semibold tracking-tight leading-none text-[17px]">SafePrint</p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Impressão autoatendimento</p>
+          <div className="flex items-center gap-2.5">
+            <span className="size-8 rounded-lg bg-brand-600 text-white flex items-center justify-center">
+              <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M3 1h6l3 3v11H3V1zm5 1v3h3v9H4V2h4z" /></svg>
+            </span>
+            <div>
+              <p className="font-semibold tracking-tight leading-none text-[16px]">SafePrint</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Impressão autoatendimento</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={toggleDark} className="text-sm rounded-lg border border-zinc-200 dark:border-white/10 px-3 py-2 hover:bg-zinc-100 dark:hover:bg-white/5" title="Alternar tema">{dark ? "Claro" : "Escuro"}</button>
@@ -460,7 +465,11 @@ export default function Home() {
       {/* HERO */}
       <div className="border-b border-zinc-200 dark:border-white/10">
         <div className="mx-auto max-w-3xl px-5 py-8">
-          <p className="text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{printer ? printer.name : "Escaneie o QR da máquina"}</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
+            {printer ? (
+              <><span className="size-1.5 rounded-full bg-emerald-500 live-dot" />{printer.name}</>
+            ) : "Escaneie o QR da máquina"}
+          </p>
           <h1 className="font-semibold tracking-tight text-[28px] leading-[1.15] mt-2">Imprima em menos de 1 minuto.</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">Envie o PDF, pague no Pix e retire na saída da caixa.</p>
           {promo?.enabled && promo?.title && (
@@ -482,7 +491,7 @@ export default function Home() {
             const isActive = step === n, done = step > n;
             return (
               <div key={l} className="flex items-center gap-1.5 flex-1 min-w-0">
-                <span className={`stepdot ${done ? "bg-emerald-600 text-white" : isActive ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900" : "bg-zinc-100 dark:bg-white/10 text-zinc-400"}`}>{done ? "✓" : n}</span>
+                <span className={`stepdot ${done ? "bg-emerald-600 text-white" : isActive ? "bg-brand-600 text-white" : "bg-zinc-100 dark:bg-white/10 text-zinc-400"}`}>{done ? "✓" : n}</span>
                 <span className={`text-xs font-medium truncate ${isActive || done ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400"}`}>{l}</span>
                 {n < 5 && <span className="flex-1 h-px bg-zinc-200 dark:bg-white/10 mx-1" />}
               </div>

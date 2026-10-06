@@ -18,13 +18,37 @@ html.dark body {
   .label { @apply text-[13px] font-medium text-zinc-700 dark:text-zinc-300; }
   .hint { @apply text-xs text-zinc-500 dark:text-zinc-400; }
   .btn-primary { @apply w-full bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold rounded-xl py-3.5 text-[15px] disabled:opacity-50; }
-  .btn-brand { @apply w-full bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold rounded-xl py-3.5 text-[15px] disabled:opacity-50; }
+  .btn-brand { @apply w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl py-3.5 text-[15px] shadow-[0_1px_2px_rgba(29,99,235,.4)] disabled:opacity-50; }
   .chip { @apply inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 text-zinc-600 dark:text-zinc-300; }
   .stepdot { @apply size-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0; }
 }
 
 /* scroll suave */
 html { scroll-behavior: smooth; }
+
+/* entrada suave dos blocos */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise .6s cubic-bezier(.21,.65,.35,1) both; }
+.rise-1 { animation-delay: .06s; }
+.rise-2 { animation-delay: .12s; }
+.rise-3 { animation-delay: .18s; }
+.rise-4 { animation-delay: .24s; }
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
+}
+
+/* pulso do status ao vivo */
+@keyframes softpulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
+}
+.live-dot { animation: softpulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
 
 /* Compat: telas internas ainda usam as classes antigas (ink-*) */
 html.dark .bg-white { background-color: #141518 !important; }
