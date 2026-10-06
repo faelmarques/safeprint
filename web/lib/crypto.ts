@@ -30,7 +30,9 @@ export function decDataUrl(stored: string | undefined): string | undefined {
   const k = key();
   if (!k) return undefined; // sem chave não há como ler (fail-closed)
   try {
-    const [, ivHex, tagHex, ctHex] = stored.split(":");
+    const parts = stored.slice(PREFIX.length).split(":");
+    if (parts.length !== 3) return undefined;
+    const [ivHex, tagHex, ctHex] = parts;
     const decipher = createDecipheriv("aes-256-gcm", k, Buffer.from(ivHex, "hex"));
     decipher.setAuthTag(Buffer.from(tagHex, "hex"));
     return Buffer.concat([decipher.update(Buffer.from(ctHex, "hex")), decipher.final()]).toString("utf8");
