@@ -315,6 +315,19 @@ export default function Home() {
           }
         } catch {}
       }
+      // Total zerado (cupom 100%): pula o Pix e libera direto
+      if (price.totalCents === 0) {
+        try {
+          for (const id of ids) {
+            const r = await fetch("/api/jobs", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: id }) });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error ?? "Erro ao liberar pedido gratuito");
+          }
+          finishPaid();
+        } catch (e: any) { setErr(e.message); }
+        finally { setLoading(false); }
+        return;
+      }
       setStep(4);
     } catch (e: any) { setErr(e.message); }
     finally { setLoading(false); }

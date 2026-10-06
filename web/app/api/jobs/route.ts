@@ -110,14 +110,17 @@ export async function POST(req: Request) {
   return NextResponse.json({ job });
 }
 
-// Confirmação de pagamento: em produção SÓ via Pix (webhook/polling).
-// O mock direto existe apenas para dev sem MERCADOPAGO_ACCESS_TOKEN.
+// Confirmação de pagamento: em produção SÓ via Pix (webhook/polling),
+// exceto pedido com total zerado (cupom 100%) que libera direto.
 export async function PUT(req: Request) {
-  const { mpEnabled } = await import("@/lib/mercadopago");
-  if (mpEnabled()) return NextResponse.json({ error: "Use o Pix para liberar a impressão" }, { status: 403 });
   const { jobId } = await req.json();
   const job = store.jobs.get(jobId);
   if (!job) return NextResponse.json({ error: "Job não encontrado" }, { status: 404 });
+  if (job.status !== "awaiting_payment") return NextResponse.json({ error: "Pedido já processado" }, { status: 409 });
+  const { mpEnabled } = await import("@/lib/mercadopago");
+  if (mpEnabled() && (job.totalCents ?? 0) > 0) {
+    return NextResponse.json({ error: "Use o Pix para liberar a impressão" }, { status: 403 });
+  }
   job.status = "queued";
   store.jobs.save(job);
   return NextResponse.json({ job });
