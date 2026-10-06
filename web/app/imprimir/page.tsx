@@ -442,38 +442,34 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen font-sans">
+    <main className="min-h-screen font-sans bg-[#fafafa] dark:bg-[#0c0d0f] text-zinc-900 dark:text-zinc-100">
       {/* NAV */}
-      <header className="sticky top-0 z-20 bg-white/85 backdrop-blur border-b border-ink-100">
+      <header className="sticky top-0 z-20 bg-[#fafafa]/90 dark:bg-[#0c0d0f]/90 backdrop-blur border-b border-zinc-200 dark:border-white/10">
         <div className="mx-auto max-w-3xl px-5 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="size-9 rounded-2xl bg-gradient-to-br from-brand-500 to-ink-900 flex items-center justify-center text-white text-lg shadow-pop">⎙</div>
-            <div>
-              <p className="font-extrabold tracking-tight leading-none text-[17px]">SafePrint</p>
-              <p className="text-[11px] text-ink-400 font-medium">Impressão autoatendimento • Franca</p>
-            </div>
+          <div>
+            <p className="font-semibold tracking-tight leading-none text-[17px]">SafePrint</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Impressão autoatendimento</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={toggleDark} className="text-xs font-bold border border-ink-200 bg-white rounded-xl px-3 py-2" title="Modo escuro">{dark ? "☀️" : "🌙"}</button>
-            <a href="/" className="text-xs font-bold text-ink-400 hover:text-ink-900 hidden sm:block">← Início</a>
-            <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 hidden sm:inline-flex">● P&B laser A4</span>
+            <button onClick={toggleDark} className="text-sm rounded-lg border border-zinc-200 dark:border-white/10 px-3 py-2 hover:bg-zinc-100 dark:hover:bg-white/5" title="Alternar tema">{dark ? "Claro" : "Escuro"}</button>
+            <a href="/" className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hidden sm:block">Início</a>
           </div>
         </div>
       </header>
 
       {/* HERO */}
-      <div className="bg-gradient-to-br from-ink-900 via-ink-900 to-brand-800 text-white">
+      <div className="border-b border-zinc-200 dark:border-white/10">
         <div className="mx-auto max-w-3xl px-5 py-8">
-          <p className="chip bg-white/10 text-brand-100 border border-white/15 mb-3">📍 {printer ? printer.name : "Escaneie o QR da máquina"}</p>
-          <h1 className="font-display font-extrabold tracking-tight text-[28px] leading-[1.1]">Imprima seu trabalho<br />em menos de 1 minuto.</h1>
-          <p className="text-sm text-white/70 mt-2 font-medium">Envie o PDF, pague no Pix e retire na saída da caixa. Sem fila, sem papelaria.</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{printer ? printer.name : "Escaneie o QR da máquina"}</p>
+          <h1 className="font-semibold tracking-tight text-[28px] leading-[1.15] mt-2">Imprima em menos de 1 minuto.</h1>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">Envie o PDF, pague no Pix e retire na saída da caixa.</p>
           {promo?.enabled && promo?.title && (
-            <p className="mt-3 inline-block chip bg-amber-400 text-ink-900 font-extrabold">🎉 {promo.title}{promo.description ? ` — ${promo.description}` : ""}</p>
+            <p className="mt-3 text-sm"><span className="font-semibold">{promo.title}</span>{promo.description ? <span className="text-zinc-600 dark:text-zinc-400"> — {promo.description}</span> : null}</p>
           )}
-          <div className="flex flex-wrap gap-2 mt-4">
-            {[["1–5 fls", "R$ 1,50"], ["6–10 fls", "R$ 1,35"], ["11+ fls", "R$ 1,25"]].map(([a, b]) => (
-              <span key={a} className="chip bg-white text-ink-900 font-extrabold">{a} • {b}<span className="font-medium text-ink-400">/folha</span></span>
-            ))}
+          <div className="flex flex-wrap gap-x-5 gap-y-1 mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+            <span><b className="text-zinc-900 dark:text-zinc-100">R$ 1,50</b>/folha até 5 fls</span>
+            <span><b className="text-zinc-900 dark:text-zinc-100">R$ 1,35</b>/folha 6–10 fls</span>
+            <span><b className="text-zinc-900 dark:text-zinc-100">R$ 1,25</b>/folha 11+ fls</span>
           </div>
         </div>
       </div>
@@ -486,15 +482,15 @@ export default function Home() {
             const isActive = step === n, done = step > n;
             return (
               <div key={l} className="flex items-center gap-1.5 flex-1 min-w-0">
-                <span className={`stepdot ${done ? "bg-emerald-500 text-white" : isActive ? "bg-ink-900 text-white" : "bg-ink-100 text-ink-400"}`}>{done ? "✓" : n}</span>
-                <span className={`text-xs font-bold truncate ${isActive || done ? "text-ink-900" : "text-ink-300"}`}>{l}</span>
-                {n < 5 && <span className="flex-1 h-px bg-ink-100 mx-1" />}
+                <span className={`stepdot ${done ? "bg-emerald-600 text-white" : isActive ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900" : "bg-zinc-100 dark:bg-white/10 text-zinc-400"}`}>{done ? "✓" : n}</span>
+                <span className={`text-xs font-medium truncate ${isActive || done ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400"}`}>{l}</span>
+                {n < 5 && <span className="flex-1 h-px bg-zinc-200 dark:bg-white/10 mx-1" />}
               </div>
             );
           })}
         </div>
 
-        {err && <div className="card p-4 border-red-200 bg-red-50 text-red-700 text-sm font-semibold">⚠️ {err}</div>}
+        {err && <div className="card p-4 border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm font-medium">{err}</div>}
 
         {showRangeHelp && (
           <div className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-sm flex items-center justify-center p-5" onClick={() => setShowRangeHelp(false)}>

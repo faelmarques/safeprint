@@ -3,32 +3,37 @@
 @tailwind utilities;
 
 body {
-  background: #f8f9fb;
-  color: #23262f;
+  background: #fafafa;
+  color: #18181b;
   -webkit-font-smoothing: antialiased;
-  transition: background-color 0.3s ease;
 }
-
-/* Dark mode simples — inverte a paleta preservando fotos */
-html.dark body { filter: invert(0.93) hue-rotate(180deg); }
-html.dark img, html.dark video, html.dark iframe { filter: invert(1) hue-rotate(180deg); }
+html.dark body {
+  background: #0c0d0f;
+  color: #e4e4e7;
+}
 
 @layer components {
-  .card { @apply bg-white border border-ink-100/80 rounded-[1.75rem] shadow-card transition-all duration-300 ease-out; }
-  .input { @apply w-full bg-white border border-ink-200/80 rounded-[1.25rem] px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 transition-all duration-300 placeholder:text-ink-300; }
-  .label { @apply text-[13px] font-semibold text-ink-700; }
-  .hint { @apply text-xs text-ink-400; }
-  .btn-primary { @apply w-full bg-ink-900 hover:bg-ink-800 text-white font-bold rounded-[1.25rem] py-3.5 text-[15px] transition-all duration-300 active:scale-[.99] disabled:opacity-50 shadow-card; }
-  .btn-brand { @apply w-full bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-[1.25rem] py-3.5 text-[15px] transition-all duration-300 active:scale-[.99] disabled:opacity-50 shadow-pop; }
-  .chip { @apply inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full transition-all duration-200; }
-  .stepdot { @apply size-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-300; }
+  .card { @apply bg-white dark:bg-[#141518] border border-zinc-200/80 dark:border-white/10 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,.05)]; }
+  .input { @apply w-full bg-white dark:bg-[#141518] border border-zinc-300 dark:border-white/15 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:border-zinc-500 dark:focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-600; }
+  .label { @apply text-[13px] font-medium text-zinc-700 dark:text-zinc-300; }
+  .hint { @apply text-xs text-zinc-500 dark:text-zinc-400; }
+  .btn-primary { @apply w-full bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold rounded-xl py-3.5 text-[15px] disabled:opacity-50; }
+  .btn-brand { @apply w-full bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold rounded-xl py-3.5 text-[15px] disabled:opacity-50; }
+  .chip { @apply inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 text-zinc-600 dark:text-zinc-300; }
+  .stepdot { @apply size-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0; }
 }
-
-/* suaviza inputs, botões e cards em toda a plataforma */
-input, select, textarea { @apply transition-all duration-300; }
-button { @apply transition-all duration-200; }
-button:active { transform: scale(0.97); }
-.card:hover { box-shadow: 0 12px 40px -12px rgba(29, 99, 235, .18); }
 
 /* scroll suave */
 html { scroll-behavior: smooth; }
+
+/* Compat: telas internas ainda usam as classes antigas (ink-*) */
+html.dark .bg-white { background-color: #141518 !important; }
+html.dark .bg-ink-50 { background-color: rgba(255,255,255,.04) !important; }
+html.dark .bg-ink-100 { background-color: rgba(255,255,255,.08) !important; }
+html.dark .bg-ink-900 { background-color: #e4e4e7 !important; }
+html.dark button.bg-ink-900, html.dark a.bg-ink-900, html.dark .bg-ink-900.text-white { color: #18181b !important; }
+html.dark .text-ink-900, html.dark .text-ink-700 { color: #f4f4f5 !important; }
+html.dark .text-ink-500, html.dark .text-ink-600 { color: #a1a1aa !important; }
+html.dark .text-ink-400, html.dark .text-ink-300 { color: #71717a !important; }
+html.dark .border-ink-100, html.dark .border-ink-200 { border-color: rgba(255,255,255,.12) !important; }
+html.dark code { background-color: rgba(255,255,255,.08) !important; }
