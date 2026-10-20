@@ -1,0 +1,44 @@
+# Evolution API — avisos no grupo do WhatsApp (SafePrint)
+# Uso: docker compose up -d  →  manager em http://localhost:8080/manager
+services:
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    container_name: safeprint-evolution
+    ports:
+      - "8080:8080"
+    environment:
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?defina no .env}
+      SERVER_URL: http://localhost:8080
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCE: "true"
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:evolution@postgres:5432/evolution
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379
+      CACHE_LOCAL_ENABLED: "true"
+      LOG_LEVEL: warn,production
+    depends_on:
+      - postgres
+      - redis
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    container_name: safeprint-evolution-db
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution
+      POSTGRES_DB: evolution
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    container_name: safeprint-evolution-redis
+    command: redis-server --save 60 1
+    volumes:
+      - evolution_redis:/data
+
+volumes:
+  evolution_pg:
+  evolution_redis:
