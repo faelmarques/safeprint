@@ -2,7 +2,7 @@
 """SafePrint monitor — avisos no grupo do WhatsApp via Evolution API.
 
 Cron (a cada hora):
-  0 * * * * cd /home/fael/Área\ de\ trabalho/safeprint/monitor && python3 monitor.py
+  0 * * * * cd /root/safeprint/monitor && python3 monitor.py
 
 Relatório diário: REPORT_HOUR (padrão 20h), dentro do mesmo cron.
 Configurações: monitor/config.env (exemplo em config.env.example).
