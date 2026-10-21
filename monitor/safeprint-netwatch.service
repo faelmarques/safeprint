@@ -1,0 +1,16 @@
+[Unit]
+Description=SafePrint netwatch (vigia da rede do armario)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/safeprint/monitor
+Environment=RELAY_URL=https://safeprint.enviofacil.pro/api/relay
+EnvironmentFile=/opt/safeprint/monitor/netwatch.env
+ExecStart=/usr/bin/python3 /opt/safeprint/monitor/netwatch.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
