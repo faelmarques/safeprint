@@ -67,7 +67,28 @@ Estamos no meio da migração/atualização visual do SafePrint. A versão nova 
 - [ ] Conferir painel `/admin` com dados mock
 - [ ] Verificar se não quebrou rotas de API (`/api/printers`, `/api/jobs`, etc)
 - [ ] Ajustar o que parecer fora do padrão
-- [ ] Decidir se vamos seguir para produção (banco/Postgres + Mercado Pago) ou manter MVP
+
+## Plano para escalar e deixar "top"
+### Fase 1: Pronto pra produção (Alta prioridade)
+- [ ] **Migrar JSON pra banco** - Trocar `web/lib/store.ts` (JSON) por Prisma + Postgres (Neon/Supabase/Railway). Começar testando SQLite local e migrar depois.
+- [ ] **Mercado Pago real** - Implementar preferência no MP, QR dinâmico e webhook `POST /api/webhooks/mercadopago` com validação + idempotência. Trocar fluxo "simulado" por real.
+- [ ] **Expirar jobs pendentes** - Criar lógica/cron pra expirar `pending` com >10-15 min. Evita fila travada com PIX não pago.
+- [ ] **Uploads mais seguros** - Validar MIME/extensão, remover EXIF de imagens, limitar tamanho, migrar pra R2/S3 com URL assinada + expiração 24h.
+
+### Fase 2: Estabilizar os Pis (Alta prioridade)
+- [ ] **Heartbeat das máquinas** - Criar `POST /api/pi/heartbeat` e fazer `pi-agent` enviar a cada 30s. Salvar `lastSeenAt` em `Printer` e exibir status online/offline no `/admin` e na landing.
+- [ ] **Agent mais resiliente** - Retry com backoff, timeout, logs, tratamento de erro do `lp`, reconexão automática.
+- [ ] **Lock por impressora** - Garantir apenas 1 job `printing` por `printerSlug` para evitar impressão simultânea.
+- [ ] **Status no painel** - Card "Status das caixas" com "Último contato há X min" no `/admin`.
+
+### Fase 3: UX, Admin e Escala (Média prioridade)
+- [ ] **Gerador de QR por impressora** - Criar `/admin/printers/[slug]/qr` gerando PNG + SVG (pronto pra colar na caixa).
+- [ ] **Dashboard com métricas** - Cards "Impresso hoje", "Faturado hoje", "Pendentes", "Reembolsos", filtros por impressora/data.
+- [ ] **Melhorar tela `/imprimir`** - Pré-visualização maior, indicador de páginas válidas, aviso pra arquivos grandes, feedback melhor no checkout.
+- [ ] **Healthcheck** - `GET /api/health` com status do banco + uptime.
+- [ ] **`.env.example`** - Criar `web/.env.example` com todas as variáveis necessárias.
+
+**Recomendação imediata:** Começar por **Heartbeat + status online/offline** (Fase 2). É rápido, resolve um ponto crítico e casa perfeitamente com a proposta "1 QR por impressora". Depois seguir com **Gerador de QR** e **Expiração de jobs pendentes**.
 
 ## Dica pra retomar
 Na próxima sessão no outro PC, cole isso pro opencode:
