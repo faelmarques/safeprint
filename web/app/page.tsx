@@ -75,7 +75,7 @@ export default function Landing() {
         <div>
           <p className="inline-flex items-center gap-2 text-sm text-ink-600">
             <span className={`size-2 rounded-full ${online > 0 ? "bg-emerald-500 live-dot" : "bg-ink-300"}`} />
-            {!loaded ? "Verificando máquinas" : online > 0 ? `${online} máquina${online > 1 ? "s" : ""} disponível${online > 1 ? "is" : ""} agora, em Franca/SP` : "Nenhuma máquina disponível no momento"}
+            {!loaded ? "Verificando máquinas" : online > 0 ? `${online} máquina${online > 1 ? "s" : ""} disponível${online > 1 ? "eis" : ""} agora, em Franca/SP` : "Nenhuma máquina disponível no momento"}
           </p>
           <h1 className="font-semibold tracking-tight text-[40px] md:text-[52px] leading-[1.06] mt-5 text-balance">
             Imprima pelo celular. Retire na máquina.
