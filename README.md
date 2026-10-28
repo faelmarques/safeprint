@@ -11,10 +11,15 @@ Monorepo profissional para escalar a nível nacional: 1 QR por impressora.
 1. Usuário escaneia QR `https://seu-dominio/?p=unifacef-bloco-a-x7k2` → impressora pré-selecionada
 2. Upload PDF/imagem → escolhe páginas (`todas`, `1-3,5`), cópias, duplex → imagem arrasta/redimensiona na folha A4
 3. Preço: até 5 fls R$1,50 • 6–10 fls R$1,35 • 11+ fls R$1,25 (editável em `/admin` → Preços & promoções)
-4. Paga Pix (MVP simulado, produção: Mercado Pago) → job `queued`
+4. Informa o WhatsApp (sem conta nem senha) e paga Pix (Mercado Pago; simulação só em dev) → job `queued`
 5. Pi dá `GET /api/pi/next?printerSlug=...`, imprime via `lp`, dá `POST` confirmando → desconta papel
 6. Papel ≤ 50 → alerta Telegram (configure `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`)
 7. "Não saiu/falhado" → envia foto → você analisa em `/admin` e reembolsa Pix manual
+
+## Documentação
+
+- `docs/AUDITORIA.md` — decisões de produto (identificação por WhatsApp), achados de segurança e redesign.
+- `docs/RECUPERACAO.md` — recuperação da máquina.
 
 ## Rodar local
 ```bash

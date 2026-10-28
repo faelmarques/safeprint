@@ -33,6 +33,10 @@ export async function POST(req: Request) {
   if (!printer) return NextResponse.json({ error: "Impressora não encontrada" }, { status: 404 });
   const liveStatus = store.meta.get(printer.id).status ?? printer.status;
   if (liveStatus !== "online") return NextResponse.json({ error: "Impressora offline no momento" }, { status: 409 });
+  const phoneDigits = String(body.phone ?? "").replace(/\D/g, "");
+  if (phoneDigits.length < 10 || phoneDigits.length > 11) {
+    return NextResponse.json({ error: "Informe um WhatsApp válido com DDD" }, { status: 400 });
+  }
   if (!pages?.length) return NextResponse.json({ error: "Selecione ao menos 1 página" }, { status: 400 });
   if (pages.length > 100) return NextResponse.json({ error: "Máximo 100 páginas por arquivo" }, { status: 400 });
   if (fileType === "image" && fileDataUrl) {
@@ -101,6 +105,7 @@ export async function POST(req: Request) {
     status: "awaiting_payment",
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    customerPhone: phoneDigits,
     fileDataUrl: encDataUrl(fileDataUrl),
   };
   store.jobs.save(job);
@@ -119,6 +124,10 @@ export async function PUT(req: Request) {
   if (!job) return NextResponse.json({ error: "Job não encontrado" }, { status: 404 });
   if (job.status !== "awaiting_payment") return NextResponse.json({ error: "Pedido já processado" }, { status: 409 });
   const { mpEnabled } = await import("@/lib/mercadopago");
+  // Produção sem token do Mercado Pago NUNCA libera pedido pago: evita impressão grátis por configuração faltando.
+  if (!mpEnabled() && process.env.NODE_ENV === "production" && (job.totalCents ?? 0) > 0) {
+    return NextResponse.json({ error: "Pagamento indisponível no momento. Avise o operador." }, { status: 503 });
+  }
   if (mpEnabled() && (job.totalCents ?? 0) > 0) {
     return NextResponse.json({ error: "Use o Pix para liberar a impressão" }, { status: 403 });
   }

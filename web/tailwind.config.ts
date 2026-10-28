@@ -1,13 +1,18 @@
 import type { Config } from "tailwindcss";
 
+// Cores semânticas via CSS variables (ver app/globals.css): o modo escuro troca
+// só os valores das variáveis, sem precisar de `dark:` em cada classe nem de !important.
+const v = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
 const config: Config = {
   darkMode: "class",
   content: ["./app/**/*.{js,ts,jsx,tsx,mdx}", "./components/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       fontFamily: {
-        display: ["Plus Jakarta Sans", "Inter", "system-ui", "sans-serif"],
-        sans: ["Plus Jakarta Sans", "Inter", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        display: ["var(--font-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
         brand: {
@@ -22,24 +27,25 @@ const config: Config = {
           800: "#193fae",
           900: "#193a89",
         },
+        canvas: v("canvas"),
+        surface: v("surface"),
         ink: {
-          50: "#f6f7f9",
-          100: "#eceef2",
-          200: "#d5dae3",
-          300: "#b1bac9",
-          400: "#8794ab",
-          500: "#68768f",
-          600: "#535e76",
-          700: "#444c60",
-          800: "#3c4252",
-          900: "#23262f",
+          50: v("ink-50"),
+          100: v("ink-100"),
+          200: v("ink-200"),
+          300: v("ink-300"),
+          400: v("ink-400"),
+          500: v("ink-500"),
+          600: v("ink-600"),
+          700: v("ink-700"),
+          800: v("ink-800"),
+          900: v("ink-900"),
         },
       },
       boxShadow: {
-        card: "0 1px 2px rgba(16,24,40,.06), 0 8px 24px -12px rgba(16,24,40,.18)",
-        pop: "0 12px 40px -12px rgba(29,99,235,.45)",
+        card: "0 1px 2px rgb(16 24 40 / .05)",
+        pop: "0 16px 48px -16px rgb(16 24 40 / .35)",
       },
-      borderRadius: { "4xl": "2rem" },
     },
   },
   plugins: [],

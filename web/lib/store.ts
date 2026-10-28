@@ -26,6 +26,7 @@ export interface PrintJob {
   expiresAt?: string; // awaiting_payment morre em 15min
   claimedAt?: string; // claim anti-duplo do agent
   claimToken?: string;
+  customerPhone?: string; // WhatsApp (só dígitos, com DDD). Nunca exposto na API pública.
   fileDataUrl?: string; // MVP: base64 pequeno. Produção: URL S3 privada com expiração.
   mpPaymentId?: number;
   mpStatus?: string;
@@ -232,7 +233,7 @@ export const store = {
     },
     // visão pública: sem bytes do arquivo
     pub(job: PrintJob) {
-      const { fileDataUrl: _drop, ...rest } = job;
+      const { fileDataUrl: _drop, customerPhone: _phone, ...rest } = job;
       return rest;
     },
   },

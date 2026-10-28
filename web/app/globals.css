@@ -2,62 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background: #fafafa;
-  color: #18181b;
-  -webkit-font-smoothing: antialiased;
+/* ---------- Tokens ---------- */
+:root {
+  --canvas: 244 246 249;
+  --surface: 255 255 255;
+  --ink-50: 246 247 249;
+  --ink-100: 236 238 242;
+  --ink-200: 213 218 227;
+  --ink-300: 177 186 201;
+  --ink-400: 135 148 171;
+  --ink-500: 104 118 143;
+  --ink-600: 83 94 118;
+  --ink-700: 68 76 96;
+  --ink-800: 60 66 82;
+  --ink-900: 20 23 31;
+  color-scheme: light;
 }
-html.dark body {
-  background: #0c0d0f;
-  color: #e4e4e7;
+html.dark {
+  --canvas: 14 16 20;
+  --surface: 21 24 30;
+  --ink-50: 26 29 36;
+  --ink-100: 36 40 49;
+  --ink-200: 52 57 69;
+  --ink-300: 95 104 122;
+  --ink-400: 131 141 158;
+  --ink-500: 156 165 180;
+  --ink-600: 184 192 205;
+  --ink-700: 208 214 224;
+  --ink-800: 226 230 237;
+  --ink-900: 240 242 246;
+  color-scheme: dark;
 }
 
-@layer components {
-  .card { @apply bg-white dark:bg-[#141518] border border-zinc-200/80 dark:border-white/10 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,.05)]; }
-  .input { @apply w-full bg-white dark:bg-[#141518] border border-zinc-300 dark:border-white/15 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:border-zinc-500 dark:focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-600; }
-  .label { @apply text-[13px] font-medium text-zinc-700 dark:text-zinc-300; }
-  .hint { @apply text-xs text-zinc-500 dark:text-zinc-400; }
-  .btn-primary { @apply w-full bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold rounded-xl py-3.5 text-[15px] disabled:opacity-50; }
-  .btn-brand { @apply w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl py-3.5 text-[15px] shadow-[0_1px_2px_rgba(29,99,235,.4)] disabled:opacity-50; }
-  .chip { @apply inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 text-zinc-600 dark:text-zinc-300; }
-  .stepdot { @apply size-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0; }
-}
-
-/* scroll suave */
 html { scroll-behavior: smooth; }
+body {
+  background: rgb(var(--canvas));
+  color: rgb(var(--ink-900));
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+:focus-visible { outline: 2px solid #3382fc; outline-offset: 2px; border-radius: 4px; }
+::selection { background: rgb(51 130 252 / .25); }
 
-/* entrada suave dos blocos */
-@keyframes rise {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.rise { animation: rise .6s cubic-bezier(.21,.65,.35,1) both; }
-.rise-1 { animation-delay: .06s; }
-.rise-2 { animation-delay: .12s; }
-.rise-3 { animation-delay: .18s; }
-.rise-4 { animation-delay: .24s; }
-@media (prefers-reduced-motion: reduce) {
-  .rise { animation: none; }
+/* ---------- Componentes ---------- */
+@layer components {
+  .card { @apply bg-surface border border-ink-100 rounded-xl shadow-card; }
+  .input {
+    @apply w-full bg-surface border border-ink-200 rounded-lg px-3.5 py-2.5 text-sm text-ink-900 outline-none
+           placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20;
+  }
+  .label { @apply text-[13px] font-medium text-ink-700; }
+  .hint { @apply text-xs text-ink-500; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium text-[15px] py-3 px-5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-primary { @apply w-full bg-ink-900 hover:bg-ink-700 text-ink-50 font-medium rounded-lg py-3 text-[15px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-brand { @apply w-full bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg py-3 text-[15px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-ghost { @apply rounded-lg border border-ink-200 text-ink-800 font-medium text-sm px-4 py-2.5 hover:bg-ink-50 transition-colors; }
+  .chip { @apply inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md border border-ink-200 bg-ink-50 text-ink-600; }
+  .stepdot { @apply size-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0; }
+  .mono { font-family: var(--font-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 }
 
-/* pulso do status ao vivo */
-@keyframes softpulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: .55; }
+/* ---------- Comprovante (elemento de identidade) ----------
+   O papel que sai da máquina e o recibo do Pix são o mesmo objeto.
+   A borda serrilhada usa drop-shadow no wrapper para acompanhar o recorte. */
+.receipt-wrap {
+  filter: drop-shadow(0 1px 0 rgb(var(--ink-200))) drop-shadow(0 14px 24px rgb(16 24 40 / .08));
 }
-.live-dot { animation: softpulse 1.6s ease-in-out infinite; }
+.receipt {
+  position: relative;
+  background: rgb(var(--surface));
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  padding-bottom: 6px;
+}
+.receipt::after {
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: -10px; height: 10px;
+  background:
+    linear-gradient(135deg, rgb(var(--surface)) 5px, transparent 0) 0 0 / 10px 10px,
+    linear-gradient(225deg, rgb(var(--surface)) 5px, transparent 0) 0 0 / 10px 10px;
+  background-repeat: repeat-x;
+}
+.dash { border-top: 1px dashed rgb(var(--ink-200)); }
+
+/* ---------- Movimento ---------- */
+@keyframes softpulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.live-dot { animation: softpulse 1.8s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   .live-dot { animation: none; }
+  * { transition-duration: 0s !important; }
 }
 
-/* Compat: telas internas ainda usam as classes antigas (ink-*) */
-html.dark .bg-white { background-color: #141518 !important; }
-html.dark .bg-ink-50 { background-color: rgba(255,255,255,.04) !important; }
-html.dark .bg-ink-100 { background-color: rgba(255,255,255,.08) !important; }
-html.dark .bg-ink-900 { background-color: #e4e4e7 !important; }
-html.dark button.bg-ink-900, html.dark a.bg-ink-900, html.dark .bg-ink-900.text-white { color: #18181b !important; }
-html.dark .text-ink-900, html.dark .text-ink-700 { color: #f4f4f5 !important; }
-html.dark .text-ink-500, html.dark .text-ink-600 { color: #a1a1aa !important; }
-html.dark .text-ink-400, html.dark .text-ink-300 { color: #71717a !important; }
-html.dark .border-ink-100, html.dark .border-ink-200 { border-color: rgba(255,255,255,.12) !important; }
-html.dark code { background-color: rgba(255,255,255,.08) !important; }
+/* ---------- Impressão do comprovante (window.print) ---------- */
+@media print {
+  body { background: #fff; }
+  header, footer, .no-print { display: none !important; }
+}
