@@ -23,6 +23,7 @@ export interface Printer {
   paperAlertAt: number;
   tiers: PriceTier[];
   colorAvailable: boolean;
+  lastSeenAt?: string | null;
 }
 
 // Seed inicial. Em produção vira tabela Postgres.

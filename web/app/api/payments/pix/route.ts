@@ -9,13 +9,13 @@ import { createPixPayment, mpEnabled } from "@/lib/mercadopago";
 export async function POST(req: Request) {
   const rl = rateLimit(req, "pix-create", 20, 60 * 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: `Muitas tentativas. Tente em ${rl.retryAfter}s.` }, { status: 429 });
-  sweepExpired();
+  await sweepExpired();
   if (!mpEnabled()) return NextResponse.json({ error: "Pix automático não configurado (sem MERCADOPAGO_ACCESS_TOKEN)" }, { status: 503 });
 
   const { jobIds, payerEmail } = await req.json().catch(() => ({}));
   if (!Array.isArray(jobIds) || !jobIds.length) return NextResponse.json({ error: "Sem pedidos" }, { status: 400 });
 
-  const jobs = jobIds.map((id: string) => store.jobs.get(id)).filter((j): j is NonNullable<typeof j> => Boolean(j));
+  const jobs = (await Promise.all(jobIds.map((id: string) => store.jobs.get(id)))).filter((j): j is NonNullable<typeof j> => Boolean(j));
   if (!jobs.length) return NextResponse.json({ error: "Pedidos não encontrados" }, { status: 404 });
   if (jobs.some((j) => j.status !== "awaiting_payment")) {
     return NextResponse.json({ error: "Algum pedido já foi pago ou expirou. Refaça o pedido." }, { status: 409 });
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       j.mpStatus = mp.status;
       j.mpQrBase64 = mp.qrBase64;
       j.mpCopyPaste = mp.qrCode;
-      store.jobs.save(j);
+      await store.jobs.save(j);
     }
     return NextResponse.json({ paymentId: mp.id, status: mp.status, qrBase64: mp.qrBase64, copyPaste: mp.qrCode, totalCents });
   } catch (e: any) {
@@ -62,17 +62,18 @@ export async function GET(req: Request) {
       const ref: string = String(data.external_reference ?? "");
       const ids = ref.split("|")[1]?.split(",") ?? [];
       for (const id of ids) {
-        const j = store.jobs.get(id);
+        const j = await store.jobs.get(id);
         if (j && j.status === "awaiting_payment") {
           j.status = "queued";
           j.mpStatus = "approved";
-          store.jobs.save(j);
+          await store.jobs.save(j);
         }
       }
     }
     const ref: string = String(data.external_reference ?? "");
     const ids = ref.split("|")[1]?.split(",") ?? [];
-    const jobs = ids.map((id) => store.jobs.get(id)).filter(Boolean).map((j) => ({ id: j!.id, status: j!.status }));
+    const all = await store.jobs.all();
+    const jobs = ids.map((id) => all.find((j) => j.id === id)).filter(Boolean).map((j) => ({ id: j!.id, status: j!.status }));
     return NextResponse.json({ status: data.status, jobs });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 502 });

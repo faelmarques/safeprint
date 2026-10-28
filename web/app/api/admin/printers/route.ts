@@ -28,22 +28,21 @@ function newCode(existing: Printer[]): string {
   return String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
 }
 
-// Lista completa (admin): inclui slug + código
 export async function GET(req: Request) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  return NextResponse.json({ printers: store.printers.all() });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const printers = await store.printers.all();
+  return NextResponse.json({ printers });
 }
 
-// Cria novo local: POST { name, location?, address?, code?, paperCapacity?, paperAlertAt? }
 export async function POST(req: Request) {
   const rl = rateLimit(req, "admin-printers", 30, 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: "Muitas tentativas" }, { status: 429 });
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const body = await req.json().catch(() => ({}));
   const name = String(body.name ?? "").trim().slice(0, 80);
   if (!name) return NextResponse.json({ error: "Nome da unidade obrigatório" }, { status: 400 });
 
-  const existing = store.printers.all();
+  const existing = await store.printers.all();
   let code = String(body.code ?? "").replace(/\D/g, "").slice(0, 6);
   if (code && !/^\d{6}$/.test(code)) return NextResponse.json({ error: "Código deve ter 6 dígitos" }, { status: 400 });
   if (code && existing.some((p) => p.code === code)) {
@@ -65,24 +64,24 @@ export async function POST(req: Request) {
     tiers: DEFAULT_TIERS,
     colorAvailable: false,
   };
-  store.printers.save(p);
-  store.paper.set(p.id, Number(body.paperCurrent ?? 0) || 0);
+  await store.printers.save(p);
+  await store.paper.set(p.id, Number(body.paperCurrent ?? 0) || 0);
   return NextResponse.json({ ok: true, printer: p });
 }
 
-// Edita local: PUT { id, name?, location?, address?, code?, status?, paperCapacity?, paperAlertAt?, regenSlug? }
 export async function PUT(req: Request) {
   const rl = rateLimit(req, "admin-printers", 30, 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: "Muitas tentativas" }, { status: 429 });
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const body = await req.json().catch(() => ({}));
-  const p = store.printers.get(String(body.id ?? ""));
+  const p = await store.printers.get(String(body.id ?? ""));
   if (!p) return NextResponse.json({ error: "Impressora não encontrada" }, { status: 404 });
 
   if (body.code !== undefined && body.code !== "") {
     const code = String(body.code).replace(/\D/g, "").slice(0, 6);
     if (!/^\d{6}$/.test(code)) return NextResponse.json({ error: "Código deve ter 6 dígitos" }, { status: 400 });
-    if (store.printers.all().some((x) => x.id !== p.id && x.code === code)) {
+    const all = await store.printers.all();
+    if (all.some((x) => x.id !== p.id && x.code === code)) {
       return NextResponse.json({ error: "Código já usado em outra máquina" }, { status: 409 });
     }
     p.code = code;
@@ -99,24 +98,24 @@ export async function PUT(req: Request) {
   }
   if (body.regenSlug) {
     p.slug = newSlug(p.name);
-    p.code = newCode(store.printers.all().filter((x) => x.id !== p.id));
+    p.code = newCode((await store.printers.all()).filter((x) => x.id !== p.id));
   }
-  store.printers.save(p);
+  await store.printers.save(p);
   return NextResponse.json({ ok: true, printer: p });
 }
 
-// Remove local: DELETE { id } — bloqueia se houver fila ativa
 export async function DELETE(req: Request) {
   const rl = rateLimit(req, "admin-printers", 30, 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: "Muitas tentativas" }, { status: 429 });
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { id } = await req.json().catch(() => ({}));
-  const p = store.printers.get(String(id ?? ""));
+  const p = await store.printers.get(String(id ?? ""));
   if (!p) return NextResponse.json({ error: "Impressora não encontrada" }, { status: 404 });
-  const active = store.jobs.all().filter((j) => j.printerId === p.id && ["queued", "printing"].includes(j.status));
+  const all = await store.jobs.all();
+  const active = all.filter((j) => j.printerId === p.id && ["queued", "printing"].includes(j.status));
   if (active.length) {
     return NextResponse.json({ error: `Há ${active.length} pedido(s) na fila. Aguarde esvaziar ou cancele antes.` }, { status: 409 });
   }
-  store.printers.remove(p.id);
+  await store.printers.remove(p.id);
   return NextResponse.json({ ok: true });
 }

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { store, notifyLowPaper, autoPauseIfEmpty, listPrinters } from "@/lib/store";
+import { publicUrl } from "@/lib/storage";
 import { decDataUrl } from "@/lib/crypto";
 
-function merged(printerId: string) {
-  const base = listPrinters().find((p) => p.id === printerId || p.slug === printerId);
+async function merged(printerId: string) {
+  const base = (await listPrinters()).find((p) => p.id === printerId || p.slug === printerId);
   if (!base) return null;
-  const o = store.meta.get(base.id);
+  const o = await store.meta.get(base.id);
+  const paperCurrent = await store.paper.get(base.id, base.paperCurrent);
   return {
     ...base,
     code: o.code ?? base.code,
@@ -16,7 +18,7 @@ function merged(printerId: string) {
     name: o.name ?? base.name,
     location: o.location ?? base.location,
     address: o.address ?? base.address,
-    paperCurrent: store.paper.get(base.id, base.paperCurrent),
+    paperCurrent,
   };
 }
 
@@ -33,20 +35,24 @@ export async function GET(req: Request) {
   if (!piAuth(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const slug = searchParams.get("printerSlug") ?? searchParams.get("printerId");
-  const printer = merged(slug ?? "");
+  const printer = await merged(slug ?? "");
   if (!printer) return NextResponse.json({ error: "printer desconhecida" }, { status: 404 });
   if (printer.status !== "online") {
     return NextResponse.json({ printer, jobs: [] });
   }
-  const pending = store.jobs.pendingForPrinter(printer.id).slice(0, 1);
+  const pending = (await store.jobs.pendingForPrinter(printer.id)).slice(0, 1);
   for (const j of pending) {
     j.status = "printing";
     j.claimedAt = new Date().toISOString();
     j.claimToken = uuid();
-    store.jobs.save(j);
+    await store.jobs.save(j);
   }
-  // descriptografa só na entrega ao Pi (repouso fica cifrado)
-  const jobs = pending.map((j) => ({ ...j, fileDataUrl: decDataUrl(j.fileDataUrl) }));
+  // entrega: com fileKey (S3/R2) devolve URL publica; sem ele, mantem o base64 descriptografado
+  const jobs = pending.map((j) => {
+    const out: any = { ...j, fileDataUrl: decDataUrl(j.fileDataUrl) };
+    if (j.fileKey) out.fileUrl = publicUrl(j.fileKey);
+    return out;
+  });
   return NextResponse.json({ printer, jobs });
 }
 
@@ -54,16 +60,16 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   if (!piAuth(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { jobId, ok } = await req.json();
-  const job = store.jobs.get(jobId);
+  const job = await store.jobs.get(jobId);
   if (!job) return NextResponse.json({ error: "job não encontrado" }, { status: 404 });
-  const printer = merged(job.printerId);
+  const printer = await merged(job.printerId);
 
   if (job.status === "done") return NextResponse.json({ job, duplicate: true });
   if (job.status === "failed") return NextResponse.json({ job, duplicate: true });
 
   if (ok === false) {
     job.status = "failed";
-    store.jobs.save(job);
+    await store.jobs.save(job);
     // Estorno automático: recebeu Pix mas não imprimiu -> devolve sem abrir o MP
     try {
       if (job.mpPaymentId && job.mpStatus === "approved" && !job.mpRefunded) {
@@ -71,7 +77,7 @@ export async function POST(req: Request) {
         if (mpEnabled()) {
           await refundMpPayment(job.mpPaymentId);
           job.mpRefunded = true;
-          store.jobs.save(job);
+          await store.jobs.save(job);
           return NextResponse.json({ job, refunded: true });
         }
       }
@@ -82,12 +88,12 @@ export async function POST(req: Request) {
   }
 
   job.status = "done";
-  store.jobs.save(job);
+  await store.jobs.save(job);
 
   if (printer) {
-    const prevLife = store.meta.get(printer.id).lifetimeSheets ?? 0;
-    store.meta.set(printer.id, { lifetimeSheets: prevLife + job.sheets });
-    const remaining = store.paper.consume(printer.id, job.sheets, printer.paperCapacity);
+    const prevLife = (await store.meta.get(printer.id)).lifetimeSheets ?? 0;
+    await store.meta.set(printer.id, { lifetimeSheets: prevLife + job.sheets });
+    const remaining = await store.paper.consume(printer.id, job.sheets, printer.paperCapacity);
     const paused = await autoPauseIfEmpty(printer.id, printer.name, remaining);
     let notified = null;
     if (!paused && remaining <= printer.paperAlertAt) {

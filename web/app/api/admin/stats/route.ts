@@ -5,11 +5,11 @@ import { decDataUrl } from "@/lib/crypto";
 const PAID = ["queued", "printing", "done"];
 
 export async function GET(req: Request) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const meta = store.meta.all();
-  const jobs = store.jobs.all();
-  const refunds = store.refunds.all();
+  const meta = await store.meta.all();
+  const jobs = await store.jobs.all();
+  const refunds = await store.refunds.all();
   const paid = jobs.filter((j) => PAID.includes(j.status));
 
   const revenue = paid.reduce((s, j) => s + j.totalCents, 0);
@@ -32,37 +32,43 @@ export async function GET(req: Request) {
     };
   });
 
-  const printers = listPrinters().map((p) => {
-    const pj = paid.filter((j) => j.printerId === p.id);
-    return {
-      ...p,
-      code: meta[p.id]?.code ?? p.code,
-      status: meta[p.id]?.status ?? p.status,
-      paperCapacity: meta[p.id]?.paperCapacity ?? p.paperCapacity,
-      paperAlertAt: meta[p.id]?.paperAlertAt ?? p.paperAlertAt,
-      name: meta[p.id]?.name ?? p.name,
-      location: meta[p.id]?.location ?? p.location,
-      address: meta[p.id]?.address ?? p.address,
-      paperCurrent: store.paper.get(p.id, p.paperCurrent),
-      lifetimeSheets: meta[p.id]?.lifetimeSheets ?? 0,
-      tiers: effectiveTiers(p.id, p.tiers),
-      revenue: pj.reduce((s, j) => s + j.totalCents, 0),
-      sheets: pj.reduce((s, j) => s + j.sheets, 0),
-      pagesPrinted: pj.reduce((s, j) => s + j.pages.length * j.copies, 0),
-      jobs: pj.length,
-      refundsOpen: refunds.filter(
-        (r) => r.status === "open" && jobs.find((j) => j.id === r.jobId)?.printerId === p.id
-      ).length,
-      recentJobs: jobs.filter((j) => j.printerId === p.id).slice(0, 15),
-    };
-  });
+  const printersList = await listPrinters();
+  const printers = await Promise.all(
+    printersList.map(async (p) => {
+      const pj = paid.filter((j) => j.printerId === p.id);
+      const paperCurrent = await store.paper.get(p.id, p.paperCurrent);
+      const tiers = await effectiveTiers(p.id, p.tiers);
+      return {
+        ...p,
+        code: meta[p.id]?.code ?? p.code,
+        status: meta[p.id]?.status ?? p.status,
+        paperCapacity: meta[p.id]?.paperCapacity ?? p.paperCapacity,
+        paperAlertAt: meta[p.id]?.paperAlertAt ?? p.paperAlertAt,
+        name: meta[p.id]?.name ?? p.name,
+        location: meta[p.id]?.location ?? p.location,
+        address: meta[p.id]?.address ?? p.address,
+        paperCurrent,
+        lifetimeSheets: meta[p.id]?.lifetimeSheets ?? 0,
+        tiers,
+        revenue: pj.reduce((s, j) => s + j.totalCents, 0),
+        sheets: pj.reduce((s, j) => s + j.sheets, 0),
+        pagesPrinted: pj.reduce((s, j) => s + j.pages.length * j.copies, 0),
+        jobs: pj.length,
+        refundsOpen: refunds.filter(
+          (r) => r.status === "open" && jobs.find((j) => j.id === r.jobId)?.printerId === p.id
+        ).length,
+        recentJobs: jobs.filter((j) => j.printerId === p.id).slice(0, 15),
+      };
+    })
+  );
 
-  // nome da impressora em cada reembolso (pro painel); foto descriptografada (só admin vê)
-  const refundsWithPrinter = refunds.map((r) => ({
-    ...r,
-    photoDataUrl: decDataUrl(r.photoDataUrl) ?? "",
-    printerName: listPrinters().find((p) => p.id === jobs.find((j) => j.id === r.jobId)?.printerId)?.name ?? "—",
-  }));
+  const refundsWithPrinter = await Promise.all(
+    refunds.map(async (r) => ({
+      ...r,
+      photoDataUrl: decDataUrl(r.photoDataUrl) ?? "",
+      printerName: printersList.find((p) => p.id === jobs.find((j) => j.id === r.jobId)?.printerId)?.name ?? "—",
+    }))
+  );
 
   return NextResponse.json({
     kpis: {
@@ -77,6 +83,6 @@ export async function GET(req: Request) {
     days,
     printers,
     refunds: refundsWithPrinter,
-    config: store.config.get(),
+    config: await store.config.get(),
   });
 }

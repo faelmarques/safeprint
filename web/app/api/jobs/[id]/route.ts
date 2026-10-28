@@ -6,11 +6,10 @@ import { rateLimit } from "@/lib/ratelimit";
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const rl = rateLimit(req, "job-status", 120, 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: "Muitas consultas" }, { status: 429 });
-  sweepExpired();
-  const job = store.jobs.get(params.id);
+  await sweepExpired();
+  const job = await store.jobs.get(params.id);
   if (!job) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
-  const queueAhead = store.jobs
-    .all()
+  const queueAhead = (await store.jobs.all())
     .filter(
       (j) =>
         j.printerId === job.printerId &&
@@ -25,13 +24,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   const rl = rateLimit(req, "job-cancel", 30, 60 * 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: "Muitas tentativas" }, { status: 429 });
-  const job = store.jobs.get(params.id);
+  const job = await store.jobs.get(params.id);
   if (!job) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   if (job.status !== "awaiting_payment" && job.status !== "expired") {
     return NextResponse.json({ error: "Pedido já pago: solicite reembolso no painel" }, { status: 409 });
   }
   job.status = "failed";
   job.fileDataUrl = undefined;
-  store.jobs.save(job);
+  await store.jobs.save(job);
   return NextResponse.json({ ok: true });
 }

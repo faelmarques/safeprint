@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const rl = rateLimit(req, "refunds-post", 10, 60 * 60 * 1000);
   if (!rl.ok) return NextResponse.json({ error: `Muitas solicitações. Tente em ${rl.retryAfter}s.` }, { status: 429 });
   const { jobId, motive, description, name, whatsapp, photoDataUrl } = await req.json();
-  const job = store.jobs.get(jobId);
+  const job = await store.jobs.get(jobId);
   if (!job) return NextResponse.json({ error: "Pedido de impressão não encontrado" }, { status: 404 });
 
   const motiveOpt = REFUND_MOTIVES.find((m) => m.value === motive);
@@ -34,23 +34,24 @@ export async function POST(req: Request) {
     status: "open",
     createdAt: new Date().toISOString(),
   };
-  store.refunds.save(r);
+  await store.refunds.save(r);
   return NextResponse.json({ refund: r, message: `Recebido, ${r.name.split(" ")[0]}! Vamos analisar e te chamar no WhatsApp para o reembolso via Pix.` });
 }
 
 export async function GET(req: Request) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  return NextResponse.json({ refunds: store.refunds.all() });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const refunds = await store.refunds.all();
+  return NextResponse.json({ refunds });
 }
 
 // Operador aprova/recusa: PUT { id, status: "approved" | "rejected" }
 export async function PUT(req: Request) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { id, status } = await req.json();
   if (!["approved", "rejected", "open"].includes(status)) {
     return NextResponse.json({ error: "Status inválido" }, { status: 400 });
   }
-  const r = store.refunds.update(id, { status });
+  const r = await store.refunds.update(id, { status });
   if (!r) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   return NextResponse.json({ refund: r });
 }

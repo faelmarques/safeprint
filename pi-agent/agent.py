@@ -38,16 +38,25 @@ def confirm(job_id: str, ok: bool):
 def print_file(job):
     job_id = job.get("id", "?")
     try:
-        data_url = job.get("fileDataUrl")
+        file_url = job.get("fileUrl")
         suffix = ".pdf" if job.get("fileType") == "pdf" else ".jpg"
-        if not (data_url and "," in data_url):
-            print(f"job {job_id} sem bytes, marcando como falha")
-            return False
-        try:
-            raw = base64.b64decode(data_url.split(",", 1)[1])
-        except Exception:
-            print(f"job {job_id} base64 inválido, marcando como falha")
-            return False
+        if file_url:
+            r = requests.get(file_url, timeout=30)
+            r.raise_for_status()
+            raw = r.content
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+                f.write(raw)
+                path = f.name
+        else:
+            data_url = job.get("fileDataUrl")
+            if not (data_url and "," in data_url):
+                print(f"job {job_id} sem bytes, marcando como falha")
+                return False
+            try:
+                raw = base64.b64decode(data_url.split(",", 1)[1])
+            except Exception:
+                print(f"job {job_id} base64 inválido, marcando como falha")
+                return False
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
             f.write(raw)
             path = f.name
@@ -100,9 +109,25 @@ def print_file(job):
         print(f"job {job_id} erro interno, marcando como falha:", e)
         return False
 
+HEARTBEAT_EVERY = int(os.getenv("HEARTBEAT_SECONDS", "30"))
+_last_hb = 0.0
+
+def heartbeat():
+    global _last_hb
+    if time.time() - _last_hb < HEARTBEAT_EVERY:
+        return
+    try:
+        r = requests.post(f"{API_BASE}/api/pi/heartbeat", json={"printerSlug": SLUG}, headers=_headers(), timeout=15)
+        r.raise_for_status()
+        _last_hb = time.time()
+        print("heartbeat ok")
+    except Exception as e:
+        print("heartbeat falhou:", e)
+
 def main():
     print(f"SafePrint agent slug={SLUG} api={API_BASE} cups={CUPS_PRINTER}")
     while True:
+        heartbeat()
         try:
             data = poll()
             for job in data.get("jobs", []):

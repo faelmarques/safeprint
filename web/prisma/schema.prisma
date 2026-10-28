@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id              String   @id
+  printerId       String
+  printerSlug    String
+  fileName       String
+  fileType       String
+  pages          Json
+  copies         Int      @default(1)
+  duplex         Boolean  @default(false)
+  pagesPerSheet Int?
+  landscape      Boolean?
+  sheets         Int
+  totalCents     Int
+  discountCents  Int?
+  couponCode     String?
+  status         String
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime?
+  claimedAt      DateTime?
+  claimToken     String?
+  customerPhone  String?
+  fileDataUrl    String?
+  mpPaymentId    Int?
+  mpStatus       String?
+  mpQrBase64     String?
+  mpCopyPaste    String?
+  mpRefunded     Boolean  @default(false)
+  fileKey        String?
+  refunds        Refund[]
+  printer        Printer @relation(fields: [printerId], references: [id])
+}
+
+model Refund {
+  id            String   @id
+  jobId         String
+  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  motive        String
+  motiveLabel   String
+  description   String?
+  name          String?
+  whatsapp      String?
+  photoDataUrl  String?
+  status        String
+  createdAt     DateTime @default(now())
+}
+
+model Printer {
+  id              String   @id
+  slug            String
+  code            String
+  name            String
+  location        String?
+  address         String?
+  status          String   @default("online")
+  paperCurrent   Int      @default(0)
+  paperCapacity  Int      @default(0)
+  paperAlertAt   Int      @default(50)
+  tiers           Json
+  colorAvailable Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  lastSeenAt      DateTime?
+  jobs            Job[]
+}
+
+model PrinterMeta {
+  id              String  @id
+  printerId       String  @unique
+  code            String?
+  status          String?
+  paperCapacity  Int?
+  paperAlertAt   Int?
+  tiers           Json?
+  name            String?
+  location        String?
+  address         String?
+  lifetimeSheets Int?
+}
+
+model Config {
+  id       Int     @id @default(1)
+  tiers   Json
+  promo   Json
+  coupons Json
+  site    Json
+}
+
+model CouponUsed {
+  code String @id
+}
+
+model AdminSession {
+  token     String   @id
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model SecurityState {
+  id          Int      @id @default(1)
+  passwordHash String?
+  mfaSecret   String?
+  mfaEnabled Boolean  @default(false)
+}

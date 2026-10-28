@@ -3,12 +3,12 @@ import { store, isAdmin, type PrinterOverride } from "@/lib/store";
 
 // Gestão da impressora: POST { printerId, qty?, capacity?, alertAt?, status? }
 export async function POST(req: Request) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { printerId, qty, capacity, alertAt, status, name, location, address, code } = await req.json().catch(() => ({}));
-  const printer = store.printers.get(String(printerId ?? ""));
+  const printer = await store.printers.get(String(printerId ?? ""));
   if (!printer) return NextResponse.json({ error: "Impressora não encontrada" }, { status: 404 });
 
-  if (qty !== undefined && qty !== "") store.paper.set(printer.id, Math.max(0, Number(qty)));
+  if (qty !== undefined && qty !== "") await store.paper.set(printer.id, Math.max(0, Number(qty)));
 
   const patch: PrinterOverride = {};
   if (capacity !== undefined && capacity !== "") patch.paperCapacity = Math.max(1, Number(capacity));
@@ -18,9 +18,10 @@ export async function POST(req: Request) {
   if (typeof location === "string" && location.trim()) patch.location = location.trim().slice(0, 120);
   if (typeof address === "string") patch.address = address.trim().slice(0, 120);
   if (typeof code === "string" && /^\d{6}$/.test(code.trim())) patch.code = code.trim();
-  if (Object.keys(patch).length) store.meta.set(printer.id, patch);
+  if (Object.keys(patch).length) await store.meta.set(printer.id, patch);
 
-  const o = store.meta.get(printer.id);
+  const o = await store.meta.get(printer.id);
+  const paperCurrent = await store.paper.get(printer.id, printer.paperCurrent);
   return NextResponse.json({
     ok: true,
     printer: {
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
       status: o.status ?? printer.status,
       paperCapacity: o.paperCapacity ?? printer.paperCapacity,
       paperAlertAt: o.paperAlertAt ?? printer.paperAlertAt,
-      paperCurrent: store.paper.get(printer.id, printer.paperCurrent),
+      paperCurrent,
     },
   });
 }

@@ -30,13 +30,13 @@ export async function POST(req: Request) {
       const targets =
         ids.length > 0
           ? ids
-          : store.jobs.all().filter((j) => Number(j.mpPaymentId) === Number(id)).map((j) => j.id);
+          : (await store.jobs.all()).filter((j) => Number(j.mpPaymentId) === Number(id)).map((j) => j.id);
       for (const jobId of targets) {
-        const j = store.jobs.get(jobId);
+        const j = await store.jobs.get(jobId);
         if (j && j.status === "awaiting_payment") {
           j.status = "queued";
           j.mpStatus = "approved";
-          store.jobs.save(j);
+          await store.jobs.save(j);
         }
       }
     }

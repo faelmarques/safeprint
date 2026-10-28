@@ -3,12 +3,13 @@ import { store, isAdmin } from "@/lib/store";
 
 // GET devolve a config atual; POST salva { tiers: [{minSheets, pricePerSheetCents}], promo: {enabled,title,description} }
 export async function GET(req: Request) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  return NextResponse.json({ config: store.config.get() });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const config = await store.config.get();
+  return NextResponse.json({ config });
 }
 
 export async function POST(req: Request) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await isAdmin(req))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { tiers, promo, coupons, site } = await req.json().catch(() => ({}));
 
   let cleanTiers: { minSheets: number; pricePerSheetCents: number }[] | undefined;
@@ -22,14 +23,14 @@ export async function POST(req: Request) {
     }
   }
 
-  const cur = store.config.get();
+  const cur = await store.config.get();
   let cleanCoupons: { code: string; percentOff: number; active: boolean; singleUse?: boolean }[] | undefined;
   if (Array.isArray(coupons)) {
     cleanCoupons = coupons
       .map((c: any) => ({ code: String(c.code ?? "").trim().toUpperCase().slice(0, 20), percentOff: Math.min(100, Math.max(1, Math.round(Number(c.percentOff)))), active: c.active !== false, singleUse: c.singleUse === true || undefined }))
       .filter((c: any) => c.code.length >= 2 && Number.isFinite(c.percentOff));
   }
-  const next = store.config.set({
+  const next = await store.config.set({
     tiers: cleanTiers ?? cur.tiers,
     promo: promo && typeof promo === "object"
       ? {

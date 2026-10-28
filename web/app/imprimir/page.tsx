@@ -295,19 +295,31 @@ export default function Home() {
           }
         }
         const dataUrl = f.type === "image" ? baked : f.dataUrl;
-        if (dataUrl && dataUrl.length > 1_800_000) {
+        let fileKey: string | undefined;
+        // Storage S3/R2 (presigned PUT): quando configurado, envia o arquivo direto; senao mantem o fluxo base64 (MVP/dev).
+        try {
+          const up = await fetch("/api/uploads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName: f.f.name, contentType: f.f.type }) });
+          const ud = await up.json().catch(() => ({}));
+          if (up.ok && ud?.url) {
+            const putRes = await fetch(ud.url, { method: "PUT", headers: { "Content-Type": ud.contentType ?? f.f.type }, body: f.f });
+            if (putRes.ok) fileKey = ud.key;
+          }
+        } catch { /* segue para o fluxo base64 */ }
+        if (!fileKey && dataUrl && dataUrl.length > 1_800_000) {
           throw new Error(`${f.f.name}: PDF muito grande para envio direto (limite ~1,3 MB). Comprima em ilovepdf.com ou mande como imagem. S3 com arquivos grandes entra na próxima versão.`);
         }
+        const payload: Record<string, unknown> = {
+          printerSlug: printer.slug, fileName: f.f.name ?? "documento",
+          fileType: f.type, pages: perFile[i].pages, copies, duplex: false, pagesPerSheet: f.perSheet,
+          landscape: f.landscape,
+          couponCode: couponApplied?.code,
+          phone: phoneDigits,
+        };
+        if (fileKey) payload.fileKey = fileKey;
+        else payload.fileDataUrl = dataUrl;
         const r = await fetch("/api/jobs", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            printerSlug: printer.slug, fileName: f.f.name ?? "documento",
-            fileType: f.type, pages: perFile[i].pages, copies, duplex: false, pagesPerSheet: f.perSheet,
-            landscape: f.landscape,
-            fileDataUrl: dataUrl,
-            couponCode: couponApplied?.code,
-            phone: phoneDigits,
-          }),
+          body: JSON.stringify(payload),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error ?? "Erro ao criar pedido");

@@ -1,11 +1,12 @@
-// Store em memória + JSON para MVP.
-// Trocar por Postgres/Prisma em produção sem mudar a API das rotas.
-import fs from "fs";
-import path from "path";
-import type { Printer } from "./printers";
-import { PRINTERS } from "./printers";
+// Store via Prisma + PostgreSQL (Fase 1 — migração definitiva do JSON em disco).
+import { randomBytes } from "crypto";
+import { prisma } from "./prisma";
+import { PRINTERS, type Printer, type PriceTier } from "./printers";
+import type { Job as JobRow, Refund as RefundRow, Config as ConfigRow, Printer as PrinterRow, PrinterMeta as PrinterMetaRow, AdminSession as AdminSessionRow, SecurityState as SecurityStateRow } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 export type JobStatus = "awaiting_payment" | "queued" | "printing" | "done" | "failed" | "expired";
+
 export interface PrintJob {
   id: string;
   printerId: string;
@@ -27,12 +28,13 @@ export interface PrintJob {
   claimedAt?: string; // claim anti-duplo do agent
   claimToken?: string;
   customerPhone?: string; // WhatsApp (só dígitos, com DDD). Nunca exposto na API pública.
-  fileDataUrl?: string; // MVP: base64 pequeno. Produção: URL S3 privada com expiração.
+  fileDataUrl?: string; // Produção: URL S3 privada com expiração.
   mpPaymentId?: number;
   mpStatus?: string;
   mpQrBase64?: string;
   mpCopyPaste?: string;
   mpRefunded?: boolean;
+  fileKey?: string; // storage S3/R2 (presigned PUT + public URL); null/undefined = legacy base64 em fileDataUrl
 }
 
 export type RefundMotive = "quantidade_incorreta" | "nao_saiu" | "saiu_falhada" | "outro";
@@ -66,7 +68,7 @@ export interface PrinterOverride {
   code?: string;
   paperCapacity?: number;
   paperAlertAt?: number;
-  tiers?: import("./printers").PriceTier[];
+  tiers?: PriceTier[];
   name?: string;
   location?: string;
   address?: string;
@@ -81,29 +83,20 @@ export interface Coupon {
 }
 
 export interface PricingConfig {
-  tiers: import("./printers").PriceTier[];
+  tiers: PriceTier[];
   promo: { enabled: boolean; title: string; description: string };
   coupons: Coupon[];
   site: SiteConfig;
 }
 
-export function isAdmin(req: Request): boolean {
-  const key = req.headers.get("x-admin-key") ?? "";
-  return store.sessions.valid(key) !== null;
+export interface SiteConfig {
+  siteName: string;
+  tagline: string;
+  heroBadge: string;
+  heroTitle: string;
+  heroSub: string;
+  footerNote: string;
 }
-
-const DATA_DIR = path.join(process.cwd(), "data");
-const JOBS_FILE = path.join(DATA_DIR, "jobs.json");
-const REFUNDS_FILE = path.join(DATA_DIR, "refunds.json");
-const PAPER_FILE = path.join(DATA_DIR, "paper.json");
-const META_FILE = path.join(DATA_DIR, "printers-meta.json");
-const CONFIG_FILE = path.join(DATA_DIR, "config.json");
-const PRINTERS_FILE = path.join(DATA_DIR, "printers.json");
-const COUPONS_USED_FILE = path.join(DATA_DIR, "coupons-used.json");
-const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
-const SECURITY_FILE = path.join(DATA_DIR, "security.json");
-const VERSION_FILE = path.join(DATA_DIR, "version.json");
-const DATA_VERSION = 3;
 
 export interface AdminSession {
   token: string;
@@ -118,15 +111,6 @@ export interface SecurityState {
   mfaEnabled: boolean;
 }
 
-export interface SiteConfig {
-  siteName: string;
-  tagline: string;
-  heroBadge: string;
-  heroTitle: string;
-  heroSub: string;
-  footerNote: string;
-}
-
 const DEFAULT_SITE: SiteConfig = {
   siteName: "SafePrint",
   tagline: "Impressão autoatendimento",
@@ -136,262 +120,425 @@ const DEFAULT_SITE: SiteConfig = {
   footerNote: "*Horário conforme o local da máquina • Arquivos excluídos em 24h",
 };
 
-function ensure() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(JOBS_FILE)) fs.writeFileSync(JOBS_FILE, "[]");
-  if (!fs.existsSync(REFUNDS_FILE)) fs.writeFileSync(REFUNDS_FILE, "[]");
-  if (!fs.existsSync(PAPER_FILE)) fs.writeFileSync(PAPER_FILE, JSON.stringify({ "printer-unifacef-01": 200, "printer-demo-centro": 180 }));
-  if (!fs.existsSync(META_FILE)) fs.writeFileSync(META_FILE, "{}");
-  if (!fs.existsSync(CONFIG_FILE)) fs.writeFileSync(CONFIG_FILE, JSON.stringify({
-    tiers: [
-      { minSheets: 1, pricePerSheetCents: 150 },
-      { minSheets: 6, pricePerSheetCents: 135 },
-      { minSheets: 11, pricePerSheetCents: 125 },
-    ],
-    promo: { enabled: false, title: "", description: "" },
-    coupons: [],
-    site: DEFAULT_SITE,
-  }, null, 2));
-  if (!fs.existsSync(PRINTERS_FILE)) fs.writeFileSync(PRINTERS_FILE, JSON.stringify(PRINTERS, null, 2));
-  if (!fs.existsSync(COUPONS_USED_FILE)) fs.writeFileSync(COUPONS_USED_FILE, "[]");
-  if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, "[]");
-  if (!fs.existsSync(SECURITY_FILE)) fs.writeFileSync(SECURITY_FILE, JSON.stringify({ mfaEnabled: false }, null, 2));
-  try { fs.chmodSync(DATA_DIR, 0o700); } catch {}
-  migrate();
+const DEFAULT_TIERS: PriceTier[] = [
+  { minSheets: 1, pricePerSheetCents: 150 },
+  { minSheets: 6, pricePerSheetCents: 135 },
+  { minSheets: 11, pricePerSheetCents: 125 },
+];
+
+function mapJob(r: JobRow): PrintJob {
+  return {
+    id: r.id,
+    printerId: r.printerId,
+    printerSlug: r.printerSlug,
+    fileName: r.fileName,
+    fileType: r.fileType === "image" ? "image" : "pdf",
+    pages: (r.pages ?? []) as number[],
+    copies: r.copies,
+    duplex: r.duplex,
+    pagesPerSheet: r.pagesPerSheet ?? undefined,
+    landscape: r.landscape ?? undefined,
+    sheets: r.sheets,
+    totalCents: r.totalCents,
+    discountCents: r.discountCents ?? undefined,
+    couponCode: r.couponCode ?? undefined,
+    status: r.status as JobStatus,
+    createdAt: r.createdAt.toISOString(),
+    expiresAt: r.expiresAt?.toISOString(),
+    claimedAt: r.claimedAt?.toISOString(),
+    claimToken: r.claimToken ?? undefined,
+    customerPhone: r.customerPhone ?? undefined,
+    fileDataUrl: r.fileDataUrl ?? undefined,
+    mpPaymentId: r.mpPaymentId ?? undefined,
+    mpStatus: r.mpStatus ?? undefined,
+    mpQrBase64: r.mpQrBase64 ?? undefined,
+    mpCopyPaste: r.mpCopyPaste ?? undefined,
+    mpRefunded: r.mpRefunded ?? false,
+    fileKey: r.fileKey ?? undefined,
+  };
 }
 
-// Migrations versionadas do banco JSON (v1: site+impressoras, v2: sessoes/mfa, v3: cupons usados).
-// Roda no boot; rollback = restaurar backup de data/ (ver docs/RECUPERACAO.md).
-function migrate() {
-  let v = 0;
-  try {
-    v = Number(JSON.parse(fs.readFileSync(VERSION_FILE, "utf-8")).version ?? 0) || 0;
-  } catch {}
-  if (v >= DATA_VERSION) return;
-  // v1: garante site em config legada + printers.json a partir do seed
-  if (v < 1) {
-    try {
-      const c = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
-      if (!c.site) {
-        c.site = {
-          siteName: "SafePrint",
-          tagline: "Impressão autoatendimento",
-          heroBadge: "🎓 Novo no Unifacef • Franca/SP",
-          heroTitle: "Imprima seu trabalho sem fila, sem papelaria.",
-          heroSub: "Escaneie o QR da máquina, envie o PDF pelo celular, pague no Pix e retire na hora.",
-          footerNote: "*Horário conforme o local da máquina • Arquivos excluídos em 24h",
-        };
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2));
-      }
-    } catch {}
-    if (!fs.existsSync(PRINTERS_FILE)) {
-      try { fs.writeFileSync(PRINTERS_FILE, JSON.stringify(PRINTERS, null, 2)); } catch {}
-    }
-  }
-  // v2/v3: arquivos com ensure() acima; só carimba versão
-  try {
-    fs.writeFileSync(VERSION_FILE, JSON.stringify({ version: DATA_VERSION, at: new Date().toISOString() }, null, 2));
-  } catch {}
+function mapRefund(r: RefundRow): RefundRequest {
+  return {
+    id: r.id,
+    jobId: r.jobId,
+    motive: r.motive as RefundMotive,
+    motiveLabel: r.motiveLabel,
+    description: r.description ?? "",
+    name: r.name ?? "",
+    whatsapp: r.whatsapp ?? "",
+    photoDataUrl: r.photoDataUrl ?? "",
+    status: (r.status === "approved" || r.status === "rejected" ? r.status : "open") as RefundRequest["status"],
+    createdAt: r.createdAt.toISOString(),
+  };
 }
 
-function read<T>(f: string, fallback: T): T {
-  try {
-    ensure();
-    return JSON.parse(fs.readFileSync(f, "utf-8")) as T;
-  } catch {
-    return fallback;
-  }
+function mapPrinter(r: PrinterRow): Printer {
+  return {
+    id: r.id,
+    slug: r.slug,
+    code: r.code,
+    name: r.name,
+    location: r.location ?? "",
+    address: r.address ?? "",
+    status: (r.status === "online" || r.status === "offline" || r.status === "maintenance" ? r.status : "online") as Printer["status"],
+    paperCurrent: r.paperCurrent,
+    paperCapacity: r.paperCapacity,
+    paperAlertAt: r.paperAlertAt,
+    tiers: (r.tiers ?? DEFAULT_TIERS) as unknown as PriceTier[],
+    colorAvailable: r.colorAvailable,
+    lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
+  };
 }
-function write(f: string, v: unknown) {
-  ensure();
-  // escrita atômica: nunca deixa JSON meio-escrito num crash/queda de luz
-  const tmp = `${f}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(v, null, 2));
-  fs.renameSync(tmp, f);
+
+function mapMeta(r: PrinterMetaRow): PrinterOverride {
+  return {
+    code: r.code ?? undefined,
+    status: (r.status === "online" || r.status === "offline" || r.status === "maintenance" ? r.status : undefined),
+    paperCapacity: r.paperCapacity ?? undefined,
+    paperAlertAt: r.paperAlertAt ?? undefined,
+    tiers: (r.tiers as PriceTier[] | null) ?? undefined,
+    name: r.name ?? undefined,
+    location: r.location ?? undefined,
+    address: r.address ?? undefined,
+    lifetimeSheets: r.lifetimeSheets ?? undefined,
+  };
+}
+
+export async function isAdmin(req: Request): Promise<boolean> {
+  const key = req.headers.get("x-admin-key") ?? "";
+  const s = await store.sessions.valid(key);
+  return s !== null;
 }
 
 export const store = {
   jobs: {
-    all(): PrintJob[] { return read<PrintJob[]>(JOBS_FILE, []); },
-    get(id: string) { return read<PrintJob[]>(JOBS_FILE, []).find((j) => j.id === id); },
-    save(job: PrintJob) {
-      const all = read<PrintJob[]>(JOBS_FILE, []);
-      const i = all.findIndex((j) => j.id === job.id);
-      if (i >= 0) all[i] = job; else all.unshift(job);
-      write(JOBS_FILE, all);
+    all: async (): Promise<PrintJob[]> => {
+      const rows = await prisma.job.findMany({ orderBy: { createdAt: "desc" } });
+      return rows.map(mapJob);
     },
-    pendingForPrinter(printerId: string): PrintJob[] {
-      sweepExpired();
-      const now = Date.now();
-      return read<PrintJob[]>(JOBS_FILE, []).filter((j) => {
-        if (j.printerId !== printerId) return false;
-        if (j.status === "queued") return true;
-        // reclaim: claim travado (crash do agent) volta pra fila após 3min
-        if (j.status === "printing" && j.claimedAt && now - Date.parse(j.claimedAt) > 3 * 60 * 1000) return true;
-        return false;
+    get: async (id: string): Promise<PrintJob | undefined> => {
+      const r = await prisma.job.findUnique({ where: { id } });
+      return r ? mapJob(r) : undefined;
+    },
+    save: async (job: PrintJob): Promise<PrintJob> => {
+      const r = await prisma.job.upsert({
+        where: { id: job.id },
+        create: {
+          id: job.id,
+          printerId: job.printerId,
+          printerSlug: job.printerSlug,
+          fileName: job.fileName,
+          fileType: job.fileType,
+          pages: job.pages as unknown as Prisma.InputJsonValue,
+          copies: job.copies,
+          duplex: job.duplex,
+          pagesPerSheet: job.pagesPerSheet,
+          landscape: job.landscape,
+          sheets: job.sheets,
+          totalCents: job.totalCents,
+          discountCents: job.discountCents,
+          couponCode: job.couponCode,
+          status: job.status,
+          createdAt: job.createdAt ? new Date(job.createdAt) : new Date(),
+          expiresAt: job.expiresAt ? new Date(job.expiresAt) : undefined,
+          claimedAt: job.claimedAt ? new Date(job.claimedAt) : undefined,
+          claimToken: job.claimToken,
+          customerPhone: job.customerPhone,
+          fileDataUrl: job.fileDataUrl,
+          mpPaymentId: job.mpPaymentId,
+          mpStatus: job.mpStatus,
+          mpQrBase64: job.mpQrBase64,
+          mpCopyPaste: job.mpCopyPaste,
+          mpRefunded: job.mpRefunded ?? false,
+          fileKey: job.fileKey,
+        } as Prisma.JobUncheckedCreateInput,
+        update: {
+          printerSlug: job.printerSlug,
+          fileName: job.fileName,
+          fileType: job.fileType,
+          pages: job.pages as unknown as Prisma.InputJsonValue,
+          copies: job.copies,
+          duplex: job.duplex,
+          pagesPerSheet: job.pagesPerSheet,
+          landscape: job.landscape,
+          sheets: job.sheets,
+          totalCents: job.totalCents,
+          discountCents: job.discountCents,
+          couponCode: job.couponCode,
+          status: job.status,
+          expiresAt: job.expiresAt ? new Date(job.expiresAt) : undefined,
+          claimedAt: job.claimedAt ? new Date(job.claimedAt) : undefined,
+          claimToken: job.claimToken,
+          customerPhone: job.customerPhone,
+          fileDataUrl: job.fileDataUrl,
+          mpPaymentId: job.mpPaymentId,
+          mpStatus: job.mpStatus,
+          mpQrBase64: job.mpQrBase64,
+          mpCopyPaste: job.mpCopyPaste,
+          mpRefunded: job.mpRefunded ?? false,
+          fileKey: job.fileKey,
+        } as Prisma.JobUncheckedUpdateInput,
       });
+      return mapJob(r);
     },
-    // visão pública: sem bytes do arquivo
-    pub(job: PrintJob) {
+    pendingForPrinter: async (printerId: string): Promise<PrintJob[]> => {
+      await sweepExpired();
+      const rows = await prisma.job.findMany({
+        where: {
+          OR: [
+            { printerId, status: "queued" },
+            { printerId, status: "printing", claimedAt: { lt: new Date(Date.now() - 3 * 60 * 1000) } },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      return rows.map(mapJob);
+    },
+    pub: (job: PrintJob) => {
       const { fileDataUrl: _drop, customerPhone: _phone, ...rest } = job;
       return rest;
     },
   },
   refunds: {
-    all(): RefundRequest[] { return read<RefundRequest[]>(REFUNDS_FILE, []); },
-    save(r: RefundRequest) {
-      const all = read<RefundRequest[]>(REFUNDS_FILE, []);
-      all.unshift(r);
-      write(REFUNDS_FILE, all);
+    all: async (): Promise<RefundRequest[]> => {
+      const rows = await prisma.refund.findMany({ orderBy: { createdAt: "desc" } });
+      return rows.map(mapRefund);
     },
-    update(id: string, patch: Partial<RefundRequest>) {
-      const all = read<RefundRequest[]>(REFUNDS_FILE, []);
-      const i = all.findIndex((r) => r.id === id);
-      if (i < 0) return null;
-      all[i] = { ...all[i], ...patch };
-      write(REFUNDS_FILE, all);
-      return all[i];
+    save: async (r: RefundRequest): Promise<RefundRequest> => {
+      const row = await prisma.refund.create({
+        data: {
+          id: r.id,
+          jobId: r.jobId,
+          motive: r.motive,
+          motiveLabel: r.motiveLabel,
+          description: r.description,
+          name: r.name,
+          whatsapp: r.whatsapp,
+          photoDataUrl: r.photoDataUrl,
+          status: r.status,
+        } as Prisma.RefundUncheckedCreateInput,
+      });
+      return mapRefund(row);
+    },
+    update: async (id: string, patch: Partial<RefundRequest>): Promise<RefundRequest | null> => {
+      try {
+        const row = await prisma.refund.update({ where: { id }, data: patch as Prisma.RefundUncheckedUpdateInput });
+        return mapRefund(row);
+      } catch {
+        return null;
+      }
     },
   },
   meta: {
-    all(): Record<string, PrinterOverride> { return read<Record<string, PrinterOverride>>(META_FILE, {}); },
-    get(printerId: string): PrinterOverride {
-      return read<Record<string, PrinterOverride>>(META_FILE, {})[printerId] ?? {};
+    all: async (): Promise<Record<string, PrinterOverride>> => {
+      const rows = await prisma.printerMeta.findMany();
+      const m: Record<string, PrinterOverride> = {};
+      for (const r of rows) m[r.printerId] = mapMeta(r);
+      return m;
     },
-    set(printerId: string, patch: PrinterOverride) {
-      const m = read<Record<string, PrinterOverride>>(META_FILE, {});
-      m[printerId] = { ...(m[printerId] ?? {}), ...patch };
-      write(META_FILE, m);
-      return m[printerId];
+    get: async (printerId: string): Promise<PrinterOverride> => {
+      const r = await prisma.printerMeta.findUnique({ where: { printerId } });
+      return r ? mapMeta(r) : {};
+    },
+    set: async (printerId: string, patch: PrinterOverride): Promise<PrinterOverride> => {
+      const r = await prisma.printerMeta.upsert({
+        where: { printerId },
+        create: { id: printerId, printerId, code: patch.code, status: patch.status, paperCapacity: patch.paperCapacity, paperAlertAt: patch.paperAlertAt, tiers: patch.tiers as unknown as Prisma.InputJsonValue, name: patch.name, location: patch.location, address: patch.address, lifetimeSheets: patch.lifetimeSheets },
+        update: { code: patch.code, status: patch.status, paperCapacity: patch.paperCapacity, paperAlertAt: patch.paperAlertAt, tiers: patch.tiers as unknown as Prisma.InputJsonValue, name: patch.name, location: patch.location, address: patch.address, lifetimeSheets: patch.lifetimeSheets },
+      });
+      return mapMeta(r);
     },
   },
   config: {
-    get(): PricingConfig {
+    get: async (): Promise<PricingConfig> => {
       const fallback: PricingConfig = {
-        tiers: [
-          { minSheets: 1, pricePerSheetCents: 150 },
-          { minSheets: 6, pricePerSheetCents: 135 },
-          { minSheets: 11, pricePerSheetCents: 125 },
-        ],
+        tiers: DEFAULT_TIERS,
         promo: { enabled: false, title: "", description: "" },
         coupons: [],
         site: DEFAULT_SITE,
       };
-      try {
-        const c = read<PricingConfig>(CONFIG_FILE, null as any);
-        if (c && Array.isArray(c.tiers) && c.tiers.length) {
-          return { ...fallback, ...c, site: { ...DEFAULT_SITE, ...(c.site ?? {}) } };
-        }
-      } catch {}
-      return fallback;
+      const r = await prisma.config.findUnique({ where: { id: 1 } });
+      if (!r) return fallback;
+      return {
+        tiers: (r.tiers as unknown as PriceTier[]) ?? DEFAULT_TIERS,
+        promo: (r.promo as PricingConfig["promo"]) ?? fallback.promo,
+        coupons: (r.coupons as unknown as Coupon[]) ?? [],
+        site: { ...DEFAULT_SITE, ...(r.site as unknown as SiteConfig) },
+      };
     },
-    set(c: PricingConfig) { write(CONFIG_FILE, c); return c; },
+    set: async (c: PricingConfig): Promise<PricingConfig> => {
+      const r = await prisma.config.upsert({
+        where: { id: 1 },
+        create: { id: 1, tiers: c.tiers as unknown as Prisma.InputJsonValue, promo: c.promo as unknown as Prisma.InputJsonValue, coupons: c.coupons as unknown as Prisma.InputJsonValue, site: c.site as unknown as Prisma.InputJsonValue },
+        update: { tiers: c.tiers as unknown as Prisma.InputJsonValue, promo: c.promo as unknown as Prisma.InputJsonValue, coupons: c.coupons as unknown as Prisma.InputJsonValue, site: c.site as unknown as Prisma.InputJsonValue },
+      });
+      return {
+        tiers: (r.tiers as unknown as PriceTier[]) ?? DEFAULT_TIERS,
+        promo: (r.promo as PricingConfig["promo"]) ?? { enabled: false, title: "", description: "" },
+        coupons: (r.coupons as unknown as Coupon[]) ?? [],
+        site: { ...DEFAULT_SITE, ...(r.site as unknown as SiteConfig) },
+      };
+    },
   },
   printers: {
-    all(): Printer[] {
-      const list = read<Printer[]>(PRINTERS_FILE, null as any);
-      if (Array.isArray(list) && list.length) return list;
-      write(PRINTERS_FILE, PRINTERS);
-      return [...PRINTERS];
+    all: async (): Promise<Printer[]> => {
+      const rows = await prisma.printer.findMany({ orderBy: { id: "asc" } });
+      if (rows.length === 0) {
+        await prisma.printer.createMany({
+          data: PRINTERS.map((p) => ({
+            id: p.id,
+            slug: p.slug,
+            code: p.code,
+            name: p.name,
+            location: p.location,
+            address: p.address,
+            status: p.status,
+            paperCurrent: p.paperCurrent,
+            paperCapacity: p.paperCapacity,
+            paperAlertAt: p.paperAlertAt,
+            tiers: p.tiers as unknown as Prisma.InputJsonValue,
+            colorAvailable: p.colorAvailable,
+          })),
+        });
+        return [...PRINTERS];
+      }
+      return rows.map(mapPrinter);
     },
-    get(idOrSlug: string): Printer | undefined {
-      return store.printers.all().find((p) => p.id === idOrSlug || p.slug === idOrSlug);
+    get: async (idOrSlug: string): Promise<Printer | undefined> => {
+      const r = await prisma.printer.findFirst({ where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] } });
+      return r ? mapPrinter(r) : undefined;
     },
-    save(p: Printer) {
-      const all = store.printers.all();
-      const i = all.findIndex((x) => x.id === p.id);
-      if (i >= 0) all[i] = p; else all.push(p);
-      write(PRINTERS_FILE, all);
-      return p;
+    save: async (p: Printer): Promise<Printer> => {
+      const r = await prisma.printer.upsert({
+        where: { id: p.id },
+        create: {
+          id: p.id,
+          slug: p.slug,
+          code: p.code,
+          name: p.name,
+          location: p.location,
+          address: p.address,
+          status: p.status,
+          paperCurrent: p.paperCurrent,
+          paperCapacity: p.paperCapacity,
+          paperAlertAt: p.paperAlertAt,
+          tiers: p.tiers as unknown as Prisma.InputJsonValue,
+          colorAvailable: p.colorAvailable,
+        } as Prisma.PrinterUncheckedCreateInput,
+        update: {
+          slug: p.slug,
+          code: p.code,
+          name: p.name,
+          location: p.location,
+          address: p.address,
+          status: p.status,
+          paperCurrent: p.paperCurrent,
+          paperCapacity: p.paperCapacity,
+          paperAlertAt: p.paperAlertAt,
+          tiers: p.tiers as unknown as Prisma.InputJsonValue,
+          colorAvailable: p.colorAvailable,
+        } as Prisma.PrinterUncheckedUpdateInput,
+      });
+      return mapPrinter(r);
     },
-    remove(id: string): boolean {
-      const all = store.printers.all();
-      const next = all.filter((x) => x.id !== id);
-      if (next.length === all.length) return false;
-      write(PRINTERS_FILE, next);
-      return true;
+    remove: async (id: string): Promise<boolean> => {
+      const r = await prisma.printer.delete({ where: { id } }).catch(() => null);
+      return !!r;
+    },
+    touchHeartbeat: async (id: string): Promise<Printer | undefined> => {
+      const r = await prisma.printer.update({ where: { id }, data: { lastSeenAt: new Date() } });
+      return mapPrinter(r);
     },
   },
   couponsUsed: {
-    // códigos de uso único já queimados (uppercase)
-    all(): string[] { return read<string[]>(COUPONS_USED_FILE, []); },
-    has(code: string): boolean {
-      return read<string[]>(COUPONS_USED_FILE, []).includes(code.trim().toUpperCase());
+    all: async (): Promise<string[]> => {
+      const rows = await prisma.couponUsed.findMany({ select: { code: true } });
+      return rows.map((r) => r.code);
     },
-    burn(code: string) {
-      const all = read<string[]>(COUPONS_USED_FILE, []);
+    has: async (code: string): Promise<boolean> => !!(await prisma.couponUsed.findUnique({ where: { code } })),
+    burn: async (code: string): Promise<void> => {
       const c = code.trim().toUpperCase();
-      if (!all.includes(c)) { all.push(c); write(COUPONS_USED_FILE, all); }
+      await prisma.couponUsed.upsert({ where: { code: c }, create: { code: c }, update: {} });
     },
   },
   paper: {
-    get(printerId: string, fallback = 200): number {
-      const m = read<PaperState>(PAPER_FILE, {});
-      return m[printerId] ?? fallback;
+    get: async (printerId: string, fallback = 200): Promise<number> => {
+      const p = await prisma.printer.findUnique({ where: { id: printerId } });
+      return p?.paperCurrent ?? fallback;
     },
-    set(printerId: string, qty: number) {
-      const m = read<PaperState>(PAPER_FILE, {});
-      m[printerId] = qty;
-      write(PAPER_FILE, m);
+    set: async (printerId: string, qty: number): Promise<void> => {
+      await prisma.printer.update({ where: { id: printerId }, data: { paperCurrent: qty } });
     },
-    consume(printerId: string, sheets: number, fallback = 200): number {
-      const cur = store.paper.get(printerId, fallback);
+    consume: async (printerId: string, sheets: number, fallback = 200): Promise<number> => {
+      const p = await prisma.printer.findUnique({ where: { id: printerId } });
+      const cur = p?.paperCurrent ?? fallback;
       const next = Math.max(0, cur - sheets);
-      store.paper.set(printerId, next);
+      await prisma.printer.update({ where: { id: printerId }, data: { paperCurrent: next } });
       return next;
     },
   },
   security: {
-    get(): SecurityState {
-      return read<SecurityState>(SECURITY_FILE, { mfaEnabled: false });
+    get: async (): Promise<SecurityState> => {
+      const r = await prisma.securityState.findUnique({ where: { id: 1 } });
+      return r
+        ? { passwordHash: r.passwordHash ?? undefined, mfaSecret: r.mfaSecret ?? undefined, mfaEnabled: r.mfaEnabled }
+        : { mfaEnabled: false };
     },
-    set(patch: Partial<SecurityState>): SecurityState {
-      const cur = store.security.get();
-      const next = { ...cur, ...patch };
-      write(SECURITY_FILE, next);
-      return next;
+    set: async (patch: Partial<SecurityState>): Promise<SecurityState> => {
+      const r = await prisma.securityState.upsert({
+        where: { id: 1 },
+        create: { id: 1, mfaEnabled: false },
+        update: { passwordHash: patch.passwordHash, mfaSecret: patch.mfaSecret, mfaEnabled: patch.mfaEnabled },
+      });
+      return { passwordHash: r.passwordHash ?? undefined, mfaSecret: r.mfaSecret ?? undefined, mfaEnabled: r.mfaEnabled };
     },
   },
   sessions: {
     ttlMs: 12 * 60 * 60 * 1000,
-    all(): AdminSession[] { return read<AdminSession[]>(SESSIONS_FILE, []); },
-    sweep(): AdminSession[] {
-      const alive = read<AdminSession[]>(SESSIONS_FILE, []).filter((s) => Date.parse(s.expiresAt) > Date.now());
-      write(SESSIONS_FILE, alive);
-      return alive;
+    all: async (): Promise<AdminSession[]> => {
+      const rows = await prisma.adminSession.findMany({ orderBy: { createdAt: "desc" } });
+      return rows.map((r) => ({ token: r.token, role: "admin" as const, createdAt: r.createdAt.toISOString(), expiresAt: r.expiresAt.toISOString() }));
     },
-    create(): AdminSession {
-      const now = Date.now();
+    sweep: async (): Promise<AdminSession[]> => {
+      const now = new Date();
+      const alive = await prisma.adminSession.findMany({ where: { expiresAt: { gt: now } }, orderBy: { createdAt: "desc" } });
+      const dead = await prisma.adminSession.findMany({ where: { expiresAt: { lte: now } } });
+      if (dead.length) await prisma.adminSession.deleteMany({ where: { token: { in: dead.map((d) => d.token) } } });
+      return alive.map((r) => ({ token: r.token, role: "admin" as const, createdAt: r.createdAt.toISOString(), expiresAt: r.expiresAt.toISOString() }));
+    },
+    create: async (): Promise<AdminSession> => {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + store.sessions.ttlMs);
       const s: AdminSession = {
-        token: require("crypto").randomBytes(32).toString("hex"),
+        token: randomBytes(32).toString("hex"),
         role: "admin",
-        createdAt: new Date(now).toISOString(),
-        expiresAt: new Date(now + store.sessions.ttlMs).toISOString(),
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
       };
-      const all = store.sessions.sweep();
-      all.push(s);
-      write(SESSIONS_FILE, all);
-      return s;
+      const r = await prisma.adminSession.create({ data: { token: s.token, role: "admin", createdAt: now, expiresAt } });
+      return { token: r.token, role: "admin" as const, createdAt: r.createdAt.toISOString(), expiresAt: r.expiresAt.toISOString() };
     },
-    valid(token: string): AdminSession | null {
+    valid: async (token: string): Promise<AdminSession | null> => {
       if (!token) return null;
-      const s = store.sessions.sweep().find((x) => x.token === token) ?? null;
-      return s;
+      const r = await prisma.adminSession.findFirst({ where: { token, expiresAt: { gt: new Date() } } });
+      if (!r) return null;
+      return { token: r.token, role: "admin" as const, createdAt: r.createdAt.toISOString(), expiresAt: r.expiresAt.toISOString() };
     },
-    revoke(token: string) {
-      write(SESSIONS_FILE, store.sessions.sweep().filter((x) => x.token !== token));
+    revoke: async (token: string): Promise<void> => {
+      await prisma.adminSession.deleteMany({ where: { token } });
     },
-    revokeAll() {
-      write(SESSIONS_FILE, []);
+    revokeAll: async (): Promise<void> => {
+      await prisma.adminSession.deleteMany({});
     },
   },
 };
 
-export function effectiveTiers(printerId: string, fallback: import("./printers").PriceTier[]): import("./printers").PriceTier[] {
-  const metaTiers = store.meta.get(printerId).tiers;
-  if (Array.isArray(metaTiers) && metaTiers.length) return metaTiers;
-  const cfgTiers = store.config.get().tiers;
-  return Array.isArray(cfgTiers) && cfgTiers.length ? cfgTiers : fallback;
+export async function effectiveTiers(printerId: string, fallback: PriceTier[]): Promise<PriceTier[]> {
+  const meta = await store.meta.get(printerId);
+  if (Array.isArray(meta.tiers) && meta.tiers.length) return meta.tiers;
+  const cfg = await store.config.get();
+  return cfg.tiers.length ? cfg.tiers : fallback;
 }
 
 export async function notifyLowPaper(printerName: string, remaining: number) {
@@ -410,11 +557,12 @@ async function notifyTelegram(msg: string) {
     return { sent: false, reason: "TELEGRAM_* não configurado (stub em log)" };
   }
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text: msg }),
     });
+    if (!res.ok) return { sent: false, reason: `HTTP ${res.status}` };
     return { sent: true };
   } catch (e) {
     console.error(e);
@@ -422,49 +570,52 @@ async function notifyTelegram(msg: string) {
   }
 }
 
-// Lista canônica de impressoras (JSON, com overrides de status/papel aplicados).
-export function listPrinters(): Printer[] {
-  const meta = store.meta.all();
-  return store.printers.all().map((p) => ({
-    ...p,
-    status: meta[p.id]?.status ?? p.status,
-    paperCapacity: meta[p.id]?.paperCapacity ?? p.paperCapacity,
-    paperAlertAt: meta[p.id]?.paperAlertAt ?? p.paperAlertAt,
-    name: meta[p.id]?.name ?? p.name,
-    location: meta[p.id]?.location ?? p.location,
-    address: meta[p.id]?.address ?? p.address,
-    code: meta[p.id]?.code ?? p.code,
-    paperCurrent: store.paper.get(p.id, p.paperCurrent),
-  }));
+export async function listPrinters(): Promise<Printer[]> {
+  const list = await store.printers.all();
+  const metaMap = await store.meta.all();
+  const out: Printer[] = [];
+  for (const p of list) {
+    const o = metaMap[p.id] ?? {};
+    const fresh = p.lastSeenAt ? Date.now() - new Date(p.lastSeenAt).getTime() < 5 * 60 * 1000 : false;
+    out.push({
+      ...p,
+      status: o.status ?? (fresh ? "online" : "offline"),
+      paperCapacity: o.paperCapacity ?? p.paperCapacity,
+      paperAlertAt: o.paperAlertAt ?? p.paperAlertAt,
+      name: o.name ?? p.name,
+      location: o.location ?? p.location,
+      address: o.address ?? p.address,
+      code: o.code ?? p.code,
+      paperCurrent: await store.paper.get(p.id, p.paperCurrent),
+    });
+  }
+  return out;
 }
 
-export function findPrinter(idOrSlug: string | null): Printer | undefined {
+export async function findPrinter(idOrSlug: string | null): Promise<Printer | undefined> {
   if (!idOrSlug) return undefined;
-  return listPrinters().find((p) => p.id === idOrSlug || p.slug === idOrSlug);
+  const list = await listPrinters();
+  return list.find((p) => p.id === idOrSlug || p.slug === idOrSlug);
 }
 
-// Expira pedidos não pagos após 15min (chamado no início das rotas quentes).
-export function sweepExpired(): number {
-  const all = read<PrintJob[]>(JOBS_FILE, []);
-  const now = Date.now();
-  let n = 0;
-  for (const j of all) {
-    if (j.status === "awaiting_payment" && j.expiresAt && Date.parse(j.expiresAt) < now) {
-      j.status = "expired";
-      j.fileDataUrl = undefined;
-      n++;
+export async function sweepExpired(): Promise<number> {
+  const now = new Date();
+  const expired = await prisma.job.findMany({ where: { status: "awaiting_payment", expiresAt: { lt: now } } });
+  for (const j of expired) {
+    await prisma.job.update({ where: { id: j.id }, data: { status: "expired", fileDataUrl: null, fileKey: null } });
+    if (j.fileKey) {
+      const { removeObject } = await import("./storage");
+      await removeObject(j.fileKey);
     }
   }
-  if (n) write(JOBS_FILE, all);
-  return n;
+  return expired.length;
 }
 
-// Pausa a máquina quando o papel zera (vendas param + alerta).
-export async function autoPauseIfEmpty(printerId: string, printerName: string, remaining: number) {
+export async function autoPauseIfEmpty(printerId: string, printerName: string, remaining: number): Promise<boolean> {
   if (remaining > 0) return false;
-  const m = store.meta.get(printerId);
+  const m = await store.meta.get(printerId);
   if (m.status === "maintenance") return true;
-  store.meta.set(printerId, { status: "maintenance" });
+  await store.meta.set(printerId, { status: "maintenance" });
   await notifyPaused(printerName, "sem papel");
   return true;
 }
