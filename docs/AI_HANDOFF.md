@@ -1,7 +1,7 @@
 # AI HANDOFF - SafePrint
 
 > Última atualização: 27/10/2026  
-> Sessão: Opencode (Big Pickle)  
+> Sessão: Opencode (Big Pickle)  - FAEL
 > Repositório: https://github.com/faelmarques/safeprint
 
 ## Objetivo atual
