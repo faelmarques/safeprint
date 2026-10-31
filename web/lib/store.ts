@@ -488,7 +488,7 @@ export const store = {
     set: async (patch: Partial<SecurityState>): Promise<SecurityState> => {
       const r = await prisma.securityState.upsert({
         where: { id: 1 },
-        create: { id: 1, mfaEnabled: false },
+        create: { id: 1, mfaEnabled: patch.mfaEnabled ?? false, passwordHash: patch.passwordHash, mfaSecret: patch.mfaSecret },
         update: { passwordHash: patch.passwordHash, mfaSecret: patch.mfaSecret, mfaEnabled: patch.mfaEnabled },
       });
       return { passwordHash: r.passwordHash ?? undefined, mfaSecret: r.mfaSecret ?? undefined, mfaEnabled: r.mfaEnabled };
